@@ -33,4 +33,20 @@ real*8::theta_0,sin_fi0,cos_fi0
   end if
 return
 end function B2obs_fi
+!====================================================================================================================!
 
+
+
+!=================================================================================================================!
+! Angle transformation from observer's reference frame to B-field reference frame
+! The function returns the latitude in B-field RF:
+! i.e. angle between the magnetic field direction and direction to the point on the NS surface.
+! SBCh.
+!=================================================================================================================!
+real*8 function obs2B(ksi,theta0,fi0)
+implicit none
+real*8,intent(in)::ksi,theta0,fi0
+  obs2B=acos(sin(ksi)*sin(theta0)*sin(fi0)+cos(ksi)*cos(theta0))
+return
+end function obs2B
+!=================================================================================================================!
