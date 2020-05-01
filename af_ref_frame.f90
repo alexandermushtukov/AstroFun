@@ -6,10 +6,14 @@
 real*8 function B2obs(ksi,theta_B,fi_B)
 implicit none
 real*8,intent(in)::ksi,theta_B,fi_B
+  !B2obs=acos(cos(theta_B)*cos(ksi)-sin(fi_B)*sin(theta_B)*cos(ksi))
   B2obs=acos(cos(theta_B)*cos(ksi)-sin(fi_B)*sin(theta_B)*sin(ksi))
+
+!write(*,*)"# ",B2obs,cos(theta_B)*cos(ksi),-sin(fi_B)*sin(theta_B)*sin(ksi);read(*,*)
 return
 end function B2obs
 !=================================================================================================================!
+
 
 
 !=================================================================================================================!
