@@ -106,3 +106,32 @@ real*8::lambda,tau_0,P_pen,P_abs,P_ref
 return
 end subroutine test_RT_prob_layer_asym
 !=================================================================================================
+
+
+
+!=================================================================================================
+! The subroutine calculates the array containing data on probability of reflection from the layer.
+! lambda - probability of photon to survive in a single scattering event.
+! [tau_min,tau_max] - the considered interval of optical thickness.
+!=================================================================================================
+subroutine get_array_P_ref(mas_P_ref,n,tau_min,tau_max,lambda)
+implicit none
+real*8::mas_P_ref
+dimension mas_P_ref(n,2)
+integer,intent(in)::n
+real*8,intent(in)::tau_min,tau_max,lambda
+integer::i
+real*8::tau,dtau,P_ref,P_abs,P_pen
+  dtau=(tau_max-tau_min)/(n-1)
+  i=1
+  do while(i.le.n)
+    tau=tau_min+(i-1)*dtau
+    call RT_prob_layer_asym(tau,lambda,P_ref,P_abs,P_pen)
+    mas_P_ref(i,1)=tau
+    mas_P_ref(i,2)=P_ref
+    !write(*,*)tau,P_ref,P_abs,P_pen; read(*,*)
+    i=i+1
+  end do
+return
+end subroutine get_array_P_ref
+!=================================================================================================
