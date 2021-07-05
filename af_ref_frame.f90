@@ -1,3 +1,42 @@
+!======================================================================================================
+! The module contains subroutines transforming the angles in local reference frame to the angles in
+! B-field reference frame and back.
+!======================================================================================================
+module AngTransformation
+contains
+  subroutine AngTrans_Atm2Bfield(theta,fi,theta_Bz,theta_B,fi_B)
+  implicit none
+  real*8,intent(in)::theta,fi,theta_Bz
+  real*8::theta_B,fi_B
+  real*8::x,y,z,xb,yb,zb
+    if(theta_Bz.eq.0.d0)then
+      theta_B=theta
+    else
+      call Polar2Decart(theta,fi,x,y,z)
+      call VecRotation3d(x,y,z,2,-theta_Bz,xb,yb,zb)
+      call Decart2Polar(xb,yb,zb,theta_B,fi_B)
+    end if
+  return
+  end subroutine AngTrans_Atm2Bfield
+
+  subroutine AngTrans_Bfield2Atm(theta_B,fi_B,theta_Bz,theta,fi)
+  implicit none
+  real*8,intent(in)::theta_B,fi_B,theta_Bz
+  real*8::theta,fi
+  real*8::x,y,z,xb,yb,zb
+    if(theta_Bz.eq.0.d0)then
+      theta=theta_B
+    else
+      call Polar2Decart(theta_B,fi_B,xb,yb,zb)
+      call VecRotation3d(xb,yb,zb,2,theta_Bz,x,y,z)
+      call Decart2Polar(x,y,z,theta,fi)
+    end if
+  return
+  end subroutine AngTrans_Bfield2Atm
+end module AngTransformation
+
+
+
 !=================================================================================================================!
 ! Angle transformation from B-field reference frame to observer's reference frame
 ! The function returns latitude in observer's RF:
