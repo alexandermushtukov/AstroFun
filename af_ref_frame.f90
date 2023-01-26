@@ -47,8 +47,6 @@ implicit none
 real*8,intent(in)::ksi,theta_B,fi_B
   !B2obs=acos(cos(theta_B)*cos(ksi)-sin(fi_B)*sin(theta_B)*cos(ksi))
   B2obs=acos(cos(theta_B)*cos(ksi)-sin(fi_B)*sin(theta_B)*sin(ksi))
-
-!write(*,*)"# ",B2obs,cos(theta_B)*cos(ksi),-sin(fi_B)*sin(theta_B)*sin(ksi);read(*,*)
 return
 end function B2obs
 !=================================================================================================================!
@@ -63,14 +61,14 @@ implicit none
 real*8,intent(in)::ksi,theta_B,fi_B
 real*8::B2obs                !==function==!
 real*8::theta_0,sin_fi0,cos_fi0
-  theta_0=B2obs(ksi,theta_B,fi_B)
-  if(sin(theta_0).eq.0.d0)then
-    B2obs_fi=0.d0
+  theta_0 = B2obs(ksi,theta_B,fi_B)
+  if( sin(theta_0).eq.0.d0 )then
+    B2obs_fi=fi_B !0.d0
   else
     sin_fi0=(sin(fi_B)*sin(theta_B)*cos(ksi)+cos(theta_B)*sin(ksi))/sin(theta_0)
     cos_fi0=cos(fi_B)*sin(theta_B)/sin(theta_0)
     B2obs_fi=acos(max(-1.d0,min(cos_fi0,1.d0)))
-    if(sin_fi0.lt.0.d0)then
+    if( sin_fi0.lt.0.d0 )then
       B2obs_fi=-B2obs_fi
     end if
   end if
