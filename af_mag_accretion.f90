@@ -63,21 +63,22 @@ contains
   return
   end function r_sp
 
+
   !====================================================================================================================
   ! The subroutine calculates the mass accretion rate at R_m accounting for mass losses due to the winds from the disc.
-  ! dotm0 - mass accretion rate from a companion star in units of Eddington mass accretion rates.
-  ! m, R6, B12 - NS mass, radius and surface magnetic field strength
-  ! Rmag8 - inner disc radius
-  ! dotm_Rm - mass accrewtion rate at the inner disc radius.
+  !   dotm0 - mass accretion rate from a companion star in units of Eddington mass accretion rates.
+  !   m, R6, B12 - NS mass, radius and surface magnetic field strength
+  !   Rmag8 - inner disc radius
+  !   dotm_Rm - mass accrewtion rate at the inner disc radius.
   !====================================================================================================================
-  subroutine Rmag_SC(dotm0,m,R6,B12,Rmag8,dotm_Rm)
+  subroutine Rmag_SC(dotm0,m,R6,B12,Lambda,eps_w,Rmag8,dotm_Rm)
   implicit none
   real*8,intent(in)::dotm0,m,R6,B12
   real*8::eps_w,C_r_to_r8,C_r8_to_r,Rmag8,dotm_Rm
   real*8::r1,r2,dotm,Lambda
   integer::i
-    Lambda=1.d0
-    eps_w=0.5d0          !==efficientcy of outflow==!
+    !Lambda=1.d0
+    !eps_w=0.5d0          !==efficientcy of outflow==!
     C_r_to_r8=m*9.d-3 !m/3.333d2
     C_r8_to_r=1.d0/C_r_to_r8
     i=1

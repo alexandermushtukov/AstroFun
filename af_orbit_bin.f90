@@ -27,7 +27,7 @@ real*8::R_Roshe_lobe  !==function==!
   if(det.eq.1)then
     !==Lagrangian point==!
     dotm0=dotM20/0.01875d0
-    call Rmag_SC(dotm0,m,R6,B12,Rmag8,dotm_Rm)
+    call Rmag_SC(dotm0,m,R6,B12,0.5d0,0.d0,Rmag8,dotm_Rm)
     beta=dotm_Rm/dotm0
     alpha=1.d0/(1.d0+q)**2        !==alpha for the case, when mass losses from the NS surface (winds from inner ragions of accretion disc)==!
   else
