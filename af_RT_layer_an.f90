@@ -1,7 +1,8 @@
 !=======================================================================================================
 ! The subroutine calculates probability of reflection, penetration through and absorption in
 ! a layer of given optical thickness tau_0.
-! lambda - probability for photon to survive after a scattering: lambda=1. for conservative scattering.
+! Result is approximate and corresponds to tau>>1!
+!   lambda - probability for photon to survive after a scattering: lambda=1. for conservative scattering.
 !=======================================================================================================
 subroutine RT_prob_layer_asym(tau_0,lambda,P_ref,P_abs,P_pen)
 implicit none
@@ -96,11 +97,11 @@ end subroutine RT_prob_layer_asym
 subroutine test_RT_prob_layer_asym()
 implicit none
 real*8::lambda,tau_0,P_pen,P_abs,P_ref
-  tau_0=200.d0
-  lambda=0.9d0
+  tau_0=0.001d0
+  lambda=0.9d0       !== probability of photon to survive in a single scattering event ==!
   call RT_prob_layer_asym(tau_0,lambda,P_ref,P_abs,P_pen)
   write(*,*)tau_0,lambda,P_ref,P_abs,P_pen
-  lambda=0.99d0
+  lambda=0.9999d0
   call RT_prob_layer_asym(tau_0,lambda,P_ref,P_abs,P_pen)
   write(*,*)tau_0,lambda,P_ref,P_abs,P_pen
 return
@@ -111,8 +112,8 @@ end subroutine test_RT_prob_layer_asym
 
 !=================================================================================================
 ! The subroutine calculates the array containing data on probability of reflection from the layer.
-! lambda - probability of photon to survive in a single scattering event.
-! [tau_min,tau_max] - the considered interval of optical thickness.
+!   lambda - probability of photon to survive in a single scattering event.
+!   [tau_min,tau_max] - the considered interval of optical thickness.
 !=================================================================================================
 subroutine get_array_P_ref(mas_P_ref,n,tau_min,tau_max,lambda)
 implicit none
