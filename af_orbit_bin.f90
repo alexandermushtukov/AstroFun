@@ -130,3 +130,51 @@ real*8::M_dot_frac_wind  !==function==!
 return
 end subroutine test_M_dot_frac_wind
 !========================================================================================================
+
+
+!====================================================================
+! Subroutine simulates motion of particle in a binary.
+! RF rotates together with a binary.
+!====================================================================
+subroutine trace_particle_in_binary()
+implicit none
+real*8::P_day,m_1,m_2,d8,d8_1,d8_2,r8(3),v6(3),a4(3),r8_1(3),r8_2(3)
+real*8::dt2,t2
+real*8::a_cen4(3),ag4_1(3),ag4_2(3),delta_r1(3),delta_r2(3),a_tot4(3)
+real*8::geom3d_length  !== functions ==!
+  !== parameters ==!
+  P_day = 10.d0   !== orbital period ==!
+  m_1 = 10.d0     !== mass of 1st star ==!
+  m_2 = 10.d0     !== mass of 2nd star ==!
+  !================!
+
+  d8 = 2.9d3 * m_1**(1./3) * (1.d0+m_2/m_1)**(1./3) * P_day**(2./3)  !== separation b/w stars ==!
+  d8_1 = m_2/(m_1+m_2)*d8
+  d8_2 = d8 - d8_1
+  r8_1(1) = +d8_1; r8_1(2:3)=0.d0    !== coordinates of 1st star ==!
+  r8_2(1) = -d8_2; r8_2(2:3)=0.d0    !== coordinates of 2nd star ==!
+  
+  !== initial parameters of particle ==!
+  r8(1:2) = 0.d0; r8(3) = d8
+  v6(1:3) = 0.d0
+  !====================================!
+
+  dt2 = 2.d0
+  t2 = 0.d0
+  do while(t2 .le. 1.e4*dt2)
+    delta_r1(1:3) = r8_1(1:3) - r8(1:3)
+    ag4_1(1:3) = 1.328d6 * m_1 * delta_r1(1:3)/ ( geom3d_length(delta_r1) )**3
+    delta_r2(1:3) = r8_2(1:3) - r8(1:3)
+    ag4_2(1:3) = 1.328d6 * m_2 * delta_r2(1:3)/ ( geom3d_length(delta_r2) )**3
+    a_cen4(1:2) = 5.3d-5 / P_day**2 * r8(1:2)
+    a_cen4(3) = 0.d0
+    a_tot4(1:3) = ag4_1(1:3) + ag4_2(1:3) + a_cen4(1:3)
+    r8(1:3) = r8(1:3) + dt2*( v6(1:3)+dt2*a_tot4(1:3)/2 )
+    v6(1:3) = v6(1:3) + dt2*a_tot4(1:3)
+    write(*,'(10(ES13.6,"  "))') t2,dt2,r8(1:3),a_tot4(1:3)  
+    !read(*,*)
+    t2 = t2 + dt2
+  end do
+
+return
+end subroutine trace_particle_in_binary
