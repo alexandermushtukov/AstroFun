@@ -155,8 +155,8 @@ real*8::geom3d_length  !== functions ==!
   r8_2(1) = -d8_2; r8_2(2:3)=0.d0    !== coordinates of 2nd star ==!
   
   !== initial parameters of particle ==!
-  r8(1:2) = 0.d0; r8(3) = d8
-  v6(1:3) = 0.d0
+  r8(1:2) = 0.d0; r8(3) = d8    !== initial coordinate of a partile ==!
+  v6(1:3) = 0.d0                !== initial velocity of a particle ==!
   !====================================!
 
   dt2 = 2.d0
@@ -166,12 +166,13 @@ real*8::geom3d_length  !== functions ==!
     ag4_1(1:3) = 1.328d6 * m_1 * delta_r1(1:3)/ ( geom3d_length(delta_r1) )**3
     delta_r2(1:3) = r8_2(1:3) - r8(1:3)
     ag4_2(1:3) = 1.328d6 * m_2 * delta_r2(1:3)/ ( geom3d_length(delta_r2) )**3
+
     a_cen4(1:2) = 5.3d-5 / P_day**2 * r8(1:2)
     a_cen4(3) = 0.d0
     a_tot4(1:3) = ag4_1(1:3) + ag4_2(1:3) + a_cen4(1:3)
     r8(1:3) = r8(1:3) + dt2*( v6(1:3)+dt2*a_tot4(1:3)/2 )
     v6(1:3) = v6(1:3) + dt2*a_tot4(1:3)
-    write(*,'(10(ES13.6,"  "))') t2,dt2,r8(1:3),a_tot4(1:3)  
+    write(*,'(10(ES13.6,"  "))') t2,dt2,r8(1:3),a_tot4(1:3)
     !read(*,*)
     t2 = t2 + dt2
   end do
