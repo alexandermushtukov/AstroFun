@@ -138,26 +138,46 @@ end subroutine test_M_dot_frac_wind
 !====================================================================
 subroutine trace_particle_in_binary()
 implicit none
-real*8::P_day,m_1,m_2,d8,d8_1,d8_2,r8(3),v6(3),a4(3),r8_1(3),r8_2(3)
+real*8::pi=3.141592653589793d0
+real*8::P_day,m_1,m_2,a8,a8_1,a8_2,r8(3),v6(3),a4(3),r8_1(3),r8_2(3)
 real*8::dt2,t2
 real*8::a_cen4(3),ag4_1(3),ag4_2(3),delta_r1(3),delta_r2(3),a_tot4(3)
-real*8::geom3d_length  !== functions ==!
+real*8::geom3d_length,delta_3d  !== functions ==!
+real*8::d8_1,d8_2,RL8_1,RL8_2,q,r_st8_1,r_st8_2,random,theta,fi,v6_ini,v6_rf(3),v6_lab(3)
   !== parameters ==!
   P_day = 10.d0   !== orbital period ==!
-  m_1 = 10.d0     !== mass of 1st star ==!
-  m_2 = 10.d0     !== mass of 2nd star ==!
+  m_1 = 2.d0     !== mass of 1st star ==!
+  m_2 = 2.d0     !== mass of 2nd star ==!
+  q = m_1/m_2
+  r_st8_1 = 1000.   !== radius of 1st star in [1.e8 cm] ==!
+  r_st8_2 = 1000.   !== radius of 2nd star in [1.e8 cm] ==!
+  v6_ini = 1.d0    !== initial wind velocity [1.e6 cm/s] ==!
   !================!
 
-  d8 = 2.9d3 * m_1**(1./3) * (1.d0+m_2/m_1)**(1./3) * P_day**(2./3)  !== separation b/w stars ==!
-  d8_1 = m_2/(m_1+m_2)*d8
-  d8_2 = d8 - d8_1
-  r8_1(1) = +d8_1; r8_1(2:3)=0.d0    !== coordinates of 1st star ==!
-  r8_2(1) = -d8_2; r8_2(2:3)=0.d0    !== coordinates of 2nd star ==!
-  
+  a8 = 2.9d3 * m_1**(1./3) * (1.d0+m_2/m_1)**(1./3) * P_day**(2./3)  !== separation b/w stars ==!
+  a8_1 = m_2/(m_1+m_2)*a8
+  a8_2 = a8 - a8_1
+  r8_1(1) = +a8_1; r8_1(2:3)=0.d0    !== coordinates of 1st star ==!
+  r8_2(1) = -a8_2; r8_2(2:3)=0.d0    !== coordinates of 2nd star ==!
+  RL8_1 = a8 * 0.49*q**(2./3)/( 0.6*q**(2./3)+log( 1. + q**(1./3) ) )
+  q = 1./q
+  RL8_2 = a8 * 0.49*q**(2./3)/( 0.6*q**(2./3)+log( 1. + q**(1./3) ) )
+  !write(*,*)m_1,m_2,a8,RL8_1,RL8_2
+  !read(*,*)
+
   !== initial parameters of particle ==!
-  r8(1:2) = 0.d0; r8(3) = d8    !== initial coordinate of a partile ==!
-  v6(1:3) = 0.d0                !== initial velocity of a particle ==!
+  ! r8(1:2) = 0.d0; r8(3) = a8    !== initial coordinate of a partile ==!
+  ! v6(1:3) = 0.d0                !== initial velocity of a particle ==!
+  !== random place of particle start from the 2nd star ==!
+  call RANDOM_NUMBER(random); theta=acos(1.d0-random)
+  call RANDOM_NUMBER(random); fi = 2*pi*random
+  r8(1) = sin(theta)*cos(fi);  r8(2) = sin(theta)*sin(fi);  r8(3) = cos(theta)
+  r8(1:3) = r_st8_2 * r8(1:3) + r8_2(1:3)
+  v6(1:3) = v6_ini * r8(1:3) / geom3d_length(r8)   !== particle is emitted along normal to the stellar atmosphere ==!
   !====================================!
+
+  d8_1 = delta_3d(r8,r8_1)
+  d8_2 = delta_3d(r8,r8_2)
 
   dt2 = 2.d0
   t2 = 0.d0
@@ -167,12 +187,22 @@ real*8::geom3d_length  !== functions ==!
     delta_r2(1:3) = r8_2(1:3) - r8(1:3)
     ag4_2(1:3) = 1.328d6 * m_2 * delta_r2(1:3)/ ( geom3d_length(delta_r2) )**3
 
+    !== centrifugal acceleration ==!
     a_cen4(1:2) = 5.3d-5 / P_day**2 * r8(1:2)
     a_cen4(3) = 0.d0
+    !==============================!
     a_tot4(1:3) = ag4_1(1:3) + ag4_2(1:3) + a_cen4(1:3)
     r8(1:3) = r8(1:3) + dt2*( v6(1:3)+dt2*a_tot4(1:3)/2 )
-    v6(1:3) = v6(1:3) + dt2*a_tot4(1:3)
-    write(*,'(10(ES13.6,"  "))') t2,dt2,r8(1:3),a_tot4(1:3)
+    v6(1:3) = v6(1:3) + dt2*a_tot4(1:3)     !== note: it is velocity in rotating RF ==!
+    d8_1 = delta_3d(r8,r8_1)
+    d8_2 = delta_3d(r8,r8_2)
+    !== component of velocity due to RF rotation ==!
+    v6_rf(1) = +7.27d-3/P_day * r8(1)
+    v6_rf(2) = +7.27d-3/P_day * r8(2)
+    v6_rf(3) = 0.d0
+    v6_lab(1:3) = v6(1:3) - v6_rf(1:3)
+    write(*,'(10(ES13.6,"  "))') t2,d8_1/RL8_1,d8_2/RL8_2,geom3d_length(v6),geom3d_length(v6_rf),geom3d_length(v6_lab) !r8(1:3),a_tot4(1:3)
+    !write(*,'(10(ES13.6,"  "))') t2,v6(1:3),v6_rf(1:3),v6_lab(1:3)
     !read(*,*)
     t2 = t2 + dt2
   end do
