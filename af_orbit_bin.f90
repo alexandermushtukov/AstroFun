@@ -143,9 +143,10 @@ real*8::P_day,m_1,m_2,a8,a8_1,a8_2,r8(3),v6(3),a4(3),r8_1(3),r8_2(3)
 real*8::dt2,t2
 real*8::a_cen4(3),a_cor4(3),ag4_1(3),ag4_2(3),delta_r1(3),delta_r2(3),a_tot4(3)
 real*8::geom3d_length,delta_3d  !== functions ==!
-real*8::d8_1,d8_2,RL8_1,RL8_2,q,r_st8_1,r_st8_2,random,theta,fi,v6_ini,v6_rf(3),v6_lab(3),acc,t_print,dt_print
+real*8::d8_1,d8_2,RL8_1,RL8_2,q,r_st8_1,r_st8_2,random,theta,fi,v6_ini,v6_rf(3),v6_lab(3),acc,t_print,dt_print,omega
   !== parameters ==!
   P_day = 10.d0   !== orbital period ==!
+  omega = 2.d0 * pi / (P_day * 86400.d0)   !== [rad/s], P_day в сутках ==!
   m_1 = 2.d0     !== mass of 1st star ==!
   m_2 = 2.d0     !== mass of 2nd star ==!
   q = m_1/m_2
@@ -173,8 +174,8 @@ real*8::d8_1,d8_2,RL8_1,RL8_2,q,r_st8_1,r_st8_2,random,theta,fi,v6_ini,v6_rf(3),
   !== random place of particle start from the 2nd star ==!
   call RANDOM_NUMBER(random); theta=acos(1.d0-random)
   call RANDOM_NUMBER(random); fi = 2*pi*random
-  !theta = 0.d0
-  !fi = 0.d0
+  theta = 0.d0
+  fi = 0.d0
   r8(1) = sin(theta)*cos(fi);  r8(2) = sin(theta)*sin(fi);  r8(3) = cos(theta)
   v6(1:3) = v6_ini * r8(1:3) / geom3d_length(r8)   !== particle is emitted along normal to the stellar atmosphere ==!
   !== correction for position of a star ==!
