@@ -155,7 +155,7 @@ real*8::d8_1,d8_2,RL8_1,RL8_2,q,r_st8_1,r_st8_2,random,theta,fi,v6_ini,v6_rf(3),
   v6_ini = 90.d0     !== initial wind velocity [1.e6 cm/s] ==!
   !================!
 
-  t_print = 0.d0; dt_print = 20.d0
+  t_print = 0.d0; dt_print = 40.d0
 
   a8 = 2.9d3 * m_1**(1./3) * (1.d0+m_2/m_1)**(1./3) * P_day**(2./3)  !== separation b/w stars ==!
   a8_1 = m_2/(m_1+m_2)*a8
@@ -195,23 +195,23 @@ real*8::d8_1,d8_2,RL8_1,RL8_2,q,r_st8_1,r_st8_2,random,theta,fi,v6_ini,v6_rf(3),
     ag4_2(1:3) = 1.328d6 * m_2 * delta_r2(1:3)/ ( geom3d_length(delta_r2) )**3
 
     !== centrifugal acceleration ==!
-    a_cen4(1:2) = 5.3d-5 / P_day**2 * r8(1:2)
+    a_cen4(1:2) = 5.2885d-5 / P_day**2 * r8(1:2)   !== note 5.2885d-5 instead 5.3d-5 makes difference ==!
     a_cen4(3) = 0.d0
     !==============================!
 
     !== coriolis acceleration ==!
-    a_cor4(1) = +2 * 7.27d-3 / P_day * v6(2)
-    a_cor4(2) = -2 * 7.27d-3 / P_day * v6(1)
+    a_cor4(1) = +2 * 7.2722d-3 / P_day * v6(2)
+    a_cor4(2) = -2 * 7.2722d-3 / P_day * v6(1)
     a_cor4(3) = 0.d0
     !============================!
     a_tot4(1:3) = ag4_1(1:3) + ag4_2(1:3) + a_cen4(1:3) + a_cor4(1:3)
     acc = geom3d_length(a_tot4)
-    dt2 = 0.1 * sqrt(10.d0 / acc)
+    dt2 = 0.03 * sqrt(10.d0 / acc)
     r8(1:3) = r8(1:3) + dt2*( v6(1:3)+dt2*a_tot4(1:3)/2 )
     v6(1:3) = v6(1:3) + dt2 * a_tot4(1:3)     !== note: it is velocity in rotating RF ==!
     d8_1 = delta_3d(r8,r8_1)
     d8_2 = delta_3d(r8,r8_2)
-    if( (d8_1.lt.r_st8_1).or.(d8_2.lt.r_st8_2) )then
+    if( (d8_1.lt.r_st8_1).or.(d8_2.lt.r_st8_2).or.( geom3d_length(v6_rf).gt.10*a8 ) )then
       exit
     end if
     !== component of velocity due to RF rotation ==!
@@ -221,7 +221,10 @@ real*8::d8_1,d8_2,RL8_1,RL8_2,q,r_st8_1,r_st8_2,random,theta,fi,v6_ini,v6_rf(3),
 
     v6_lab(1:3) = v6(1:3) + v6_rf(1:3)
     if( t2.gt.t_print )then
-      write(*,'(10(ES13.6,"  "))') t2, d8_1/RL8_1, d8_2/RL8_2, geom3d_length(v6), geom3d_length(v6_rf), geom3d_length(v6_lab), geom3d_length(a_tot4)
+      write(*,'(10(ES13.6,"  "))') t2, d8_1/RL8_1, d8_2/RL8_2, &
+                                   geom3d_length(v6), geom3d_length(v6_rf), geom3d_length(v6_lab), geom3d_length(a_tot4)
+!write(*,'(10(ES13.6,"  "))') t2,&
+!                             v6(1:3), v6_rf(1:3) !, geom3d_length(v6_lab)
       t_print = t_print + dt_print
     end if
     !write(*,*) v6(1:3),dt2*a_tot4(1:3)
