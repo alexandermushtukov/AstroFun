@@ -174,8 +174,8 @@ real*8::d8_1,d8_2,RL8_1,RL8_2,q,r_st8_1,r_st8_2,random,theta,fi,v6_ini,v6_rf(3),
   !== random place of particle start from the 2nd star ==!
   call RANDOM_NUMBER(random); theta=acos(1.d0-random)
   call RANDOM_NUMBER(random); fi = 2*pi*random
-  theta = 0.d0
-  fi = 0.d0
+  !theta = 0.d0
+  !fi = 0.d0
   r8(1) = sin(theta)*cos(fi);  r8(2) = sin(theta)*sin(fi);  r8(3) = cos(theta)
   v6(1:3) = v6_ini * r8(1:3) / geom3d_length(r8)   !== particle is emitted along normal to the stellar atmosphere ==!
   !== correction for position of a star ==!
@@ -206,12 +206,12 @@ real*8::d8_1,d8_2,RL8_1,RL8_2,q,r_st8_1,r_st8_2,random,theta,fi,v6_ini,v6_rf(3),
     !============================!
     a_tot4(1:3) = ag4_1(1:3) + ag4_2(1:3) + a_cen4(1:3) + a_cor4(1:3)
     acc = geom3d_length(a_tot4)
-    dt2 = 0.03 * sqrt(10.d0 / acc)
+    dt2 = 0.05* sqrt(10.d0 / acc)
     r8(1:3) = r8(1:3) + dt2*( v6(1:3)+dt2*a_tot4(1:3)/2 )
     v6(1:3) = v6(1:3) + dt2 * a_tot4(1:3)     !== note: it is velocity in rotating RF ==!
     d8_1 = delta_3d(r8,r8_1)
     d8_2 = delta_3d(r8,r8_2)
-    if( (d8_1.lt.r_st8_1).or.(d8_2.lt.r_st8_2).or.( geom3d_length(v6_rf).gt.10*a8 ) )then
+    if( (d8_1.lt.r_st8_1).or.(d8_2.lt.r_st8_2).or.( geom3d_length(r8).gt.40*a8 ) )then
       exit
     end if
     !== component of velocity due to RF rotation ==!
@@ -221,7 +221,7 @@ real*8::d8_1,d8_2,RL8_1,RL8_2,q,r_st8_1,r_st8_2,random,theta,fi,v6_ini,v6_rf(3),
 
     v6_lab(1:3) = v6(1:3) + v6_rf(1:3)
     if( t2.gt.t_print )then
-      write(*,'(10(ES13.6,"  "))') t2, d8_1/RL8_1, d8_2/RL8_2, &
+      write(*,'(10(ES13.6,"  "))') t2, geom3d_length(r8)/a8, d8_1/RL8_1, d8_2/RL8_2, &
                                    geom3d_length(v6), geom3d_length(v6_rf), geom3d_length(v6_lab), geom3d_length(a_tot4)
 !write(*,'(10(ES13.6,"  "))') t2,&
 !                             v6(1:3), v6_rf(1:3) !, geom3d_length(v6_lab)
