@@ -262,7 +262,7 @@ real*8::stat(4)
   r_st8_1 = 1000.    !== radius of 1st star in [1.e8 cm] ==!
   r_st8_2 = 1000.    !== radius of 2nd star in [1.e8 cm] ==!
   v6_ini = 80.d0     !== initial wind velocity [1.e6 cm/s] ==!
-  n_w    = int(2    .e3)       !== number of particles ==!
+  n_w    = int(1.e3)       !== number of particles ==!
   !================!
 
   a8 = 2.9d3 * m_1**(1./3) * (1.d0+m_2/m_1)**(1./3) * P_day**(2./3)  !== separation b/w stars ==!
