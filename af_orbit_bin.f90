@@ -188,7 +188,7 @@ real*8::d8_1,d8_2,RL8_1,RL8_2,q,r_st8_1,r_st8_2,random,theta,fi,v6_ini,v6_rf(3),
 
   dt2 = 1.d0
   t2 = 0.d0
-  do while(t2 .le. 2.d5)
+  do while( t2 .le. 2.d5 )
     delta_r1(1:3) = r8_1(1:3) - r8(1:3)
     ag4_1(1:3) = 1.328d6 * m_1 * delta_r1(1:3)/ ( geom3d_length(delta_r1) )**3
     delta_r2(1:3) = r8_2(1:3) - r8(1:3)
@@ -223,15 +223,157 @@ real*8::d8_1,d8_2,RL8_1,RL8_2,q,r_st8_1,r_st8_2,random,theta,fi,v6_ini,v6_rf(3),
     if( t2.gt.t_print )then
       write(*,'(10(ES13.6,"  "))') t2, geom3d_length(r8)/a8, d8_1/RL8_1, d8_2/RL8_2, &
                                    geom3d_length(v6), geom3d_length(v6_rf), geom3d_length(v6_lab), geom3d_length(a_tot4)
-!write(*,'(10(ES13.6,"  "))') t2,&
-!                             v6(1:3), v6_rf(1:3) !, geom3d_length(v6_lab)
       t_print = t_print + dt_print
     end if
-    !write(*,*) v6(1:3),dt2*a_tot4(1:3)
-    !write(*,'(10(ES13.6,"  "))') t2,v6(1:3),v6_rf(1:3),v6_lab(1:3)
-    !read(*,*)
     t2 = t2 + dt2
   end do
 
 return
 end subroutine trace_particle_in_binary
+
+
+!====================================================================
+! Subroutine simulates motion of particle in a binary.
+! RF rotates together with a binary.
+! Terminates when:
+!  det_res=0 : particle is sufficiently far AND unbound
+!  det_res=1 : collision with star 1
+!  det_res=2 : collision with star 2
+!  det_res=3 : time > 10 orbital periods
+! Now runs n_w particles in a loop.
+!====================================================================
+subroutine trace_particle_in_binary_2()
+implicit none
+integer::det_res, n_w, iw
+real*8::pi=3.141592653589793d0
+real*8::P_day,m_1,m_2,a8,a8_1,a8_2,r8(3),v6(3),a4(3),r8_1(3),r8_2(3)
+real*8::dt2,t2,t2_max,omega_cu
+real*8::a_cen4(3),a_cor4(3),ag4_1(3),ag4_2(3),delta_r1(3),delta_r2(3),a_tot4(3)
+real*8::geom3d_length,delta_3d  !== functions ==!
+real*8::d8_1,d8_2,RL8_1,RL8_2,q,r_st8_1,r_st8_2,random,theta,fi,v6_ini,v6_rf(3),v6_lab(3),acc,t_print,dt_print,omega
+real*8::E_spec, r_norm
+real*8::stat(4)
+  !== parameters ==!
+  P_day = 2.d0   !== orbital period ==!
+  omega = 2.d0 * pi / (P_day * 86400.d0)   !== [rad/s], P_day в сутках ==!
+  m_1 = 2.d0     !== mass of 1st star ==!
+  m_2 = 2.d0     !== mass of 2nd star ==!
+  q = m_1/m_2
+  r_st8_1 = 1000.    !== radius of 1st star in [1.e8 cm] ==!
+  r_st8_2 = 1000.    !== radius of 2nd star in [1.e8 cm] ==!
+  v6_ini = 80.d0     !== initial wind velocity [1.e6 cm/s] ==!
+  n_w    = int(2    .e3)       !== number of particles ==!
+  !================!
+
+  a8 = 2.9d3 * m_1**(1./3) * (1.d0+m_2/m_1)**(1./3) * P_day**(2./3)  !== separation b/w stars ==!
+  write(*,*)"# ",a8,r_st8_1,r_st8_2
+  a8_1 = m_2/(m_1+m_2)*a8
+  a8_2 = a8 - a8_1
+  r8_1(1) = +a8_1; r8_1(2:3)=0.d0    !== coordinates of 1st star ==!
+  r8_2(1) = -a8_2; r8_2(2:3)=0.d0    !== coordinates of 2nd star ==!
+  RL8_1 = a8 * 0.49*q**(2./3)/( 0.6*q**(2./3)+log( 1. + q**(1./3) ) )
+  q = 1./q
+  RL8_2 = a8 * 0.49*q**(2./3)/( 0.6*q**(2./3)+log( 1. + q**(1./3) ) )
+
+  !== time limit: 10 orbital periods in code units (uses same omega constant as below) ==!
+  omega_cu = 7.2722d-3 / P_day
+  t2_max   = 10.d0 * 2.d0*pi / omega_cu
+
+  stat(1:4)=0.d0
+  !== cycle over particles ==!
+  do iw = 1, n_w
+
+    t_print = 0.d0; dt_print = 40.d0
+    det_res = -1
+
+    !== initial parameters of particle ==!
+    !== random place of particle start from the 2nd star ==!
+    call RANDOM_NUMBER(random); theta=acos(1.d0-random)
+    call RANDOM_NUMBER(random); fi = 2*pi*random
+    r8(1) = sin(theta)*cos(fi);  r8(2) = sin(theta)*sin(fi);  r8(3) = cos(theta)
+    v6(1:3) = v6_ini * r8(1:3) / geom3d_length(r8)   !== particle is emitted along normal to the stellar atmosphere ==!
+    !== correction for position of a star ==!
+    r8(1:3) = (1.02d0*r_st8_2) * r8(1:3) + r8_2(1:3) !== we start particle a little bit above stellar surface ==!
+    !====================================!
+
+    d8_1 = delta_3d(r8,r8_1)
+    d8_2 = delta_3d(r8,r8_2)
+
+    dt2 = 1.d0
+    t2 = 0.d0
+    do
+      delta_r1(1:3) = r8_1(1:3) - r8(1:3)
+      ag4_1(1:3) = 1.328d6 * m_1 * delta_r1(1:3)/ ( geom3d_length(delta_r1) )**3
+      delta_r2(1:3) = r8_2(1:3) - r8(1:3)
+      ag4_2(1:3) = 1.328d6 * m_2 * delta_r2(1:3)/ ( geom3d_length(delta_r2) )**3
+
+      !== centrifugal acceleration ==!
+      a_cen4(1:2) = 5.2885d-5 / P_day**2 * r8(1:2)
+      a_cen4(3) = 0.d0
+      !==============================!
+
+      !== coriolis acceleration ==!
+      a_cor4(1) = +2 * 7.2722d-3 / P_day * v6(2)
+      a_cor4(2) = -2 * 7.2722d-3 / P_day * v6(1)
+      a_cor4(3) = 0.d0
+      !============================!
+
+      a_tot4(1:3) = ag4_1(1:3) + ag4_2(1:3) + a_cen4(1:3) + a_cor4(1:3)
+      acc = geom3d_length(a_tot4)
+
+      !== adaptive timestep ==!
+      dt2 = 0.05d0 * sqrt(10.d0 / acc)
+
+      !== advance (position + velocity in rotating RF) ==!
+      r8(1:3) = r8(1:3) + dt2*( v6(1:3) + dt2*a_tot4(1:3)/2.d0 )
+      v6(1:3) = v6(1:3) + dt2 * a_tot4(1:3)
+
+      !== distances after move ==!
+      d8_1 = delta_3d(r8,r8_1)
+      d8_2 = delta_3d(r8,r8_2)
+      r_norm = geom3d_length(r8)
+
+      !== component of velocity due to RF rotation & lab-frame velocity ==!
+      v6_rf(1) = -7.27d-3 / P_day * r8(2)
+      v6_rf(2) = +7.27d-3 / P_day * r8(1)
+      v6_rf(3) = 0.d0
+      v6_lab(1:3) = v6(1:3) + v6_rf(1:3)
+
+      !== check collision ==!
+      if( d8_1.lt.r_st8_1 )then
+        det_res = 1
+        exit
+      end if
+      if( d8_2.lt.r_st8_2 )then
+        det_res = 2
+        exit
+      end if
+
+      !== check "sufficiently far and unbound" ==!
+      E_spec = 0.5d0*geom3d_length(v6_lab)**2 - 1.328d6*( m_1/d8_1 + m_2/d8_2 )
+      if( (r_norm.gt.40.d0*a8) .and. (E_spec.gt.0.d0) )then
+        det_res = 0
+        exit
+      end if
+
+      !== diagnostics ==!
+      if( t2.gt.t_print )then
+        !write(*,'(10(ES13.6,"  "))') t2, r_norm/a8, d8_1/RL8_1, d8_2/RL8_2, &
+        !                             geom3d_length(v6), geom3d_length(v6_rf), geom3d_length(v6_lab), geom3d_length(a_tot4)
+        t_print = t_print + dt_print
+      end if
+
+      t2 = t2 + dt2
+
+      !== time limit (>10 orbits) ==!
+      if( t2.gt.t2_max )then
+        det_res = 3
+        exit
+      end if
+    end do
+    stat(det_res+1)=stat(det_res+1)+1.d0
+    !write(*,*) iw, det_res   !== result for this particle ==!
+  end do  !== iw loop ==!
+  write(*,*)stat(1:4)/SUM(stat)
+return
+end subroutine trace_particle_in_binary_2
