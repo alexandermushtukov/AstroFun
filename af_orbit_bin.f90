@@ -144,7 +144,7 @@ implicit none
 real*8::stat(4),m_1,m_2,P_day,v6_ini
 integer::n_w
   201 format (8(es11.4,"   "))
-  n_w = int(4.e3)
+  n_w = int(8.e3)
   m_1 = 2.d0     !== NS mass ==!
   m_2 = 8.d0     !== companion mass: NGC 7793 P13 - 10.-20.; M51 ULX-7 >8. ==!
   P_day = 5.d0  !5.7d0   !== NGC 5907 ULX-1: 5.66; NGC 7793 P13 - 65; M51 ULX7 - 2  ==!
@@ -182,15 +182,10 @@ real*8::d8_1,d8_2,RL8_1,RL8_2,q,r_st8_1,r_st8_2,random,theta,fi,v6_rf(3),v6_lab(
 real*8::E_spec, r_norm
 real*8::stat(4)
   !== parameters ==!
-  !P_day = 2.d0   !== orbital period ==!
   omega = 2.d0 * pi / (P_day * 86400.d0)   !== [rad/s], P_day в сутках ==!
-  !m_1 = 2.d0     !== mass of 1st star ==!
-  !m_2 = 2.d0     !== mass of 2nd star ==!
   q = m_1/m_2
   r_st8_1 = 1000.    !== radius of 1st star in [1.e8 cm] ==!
   r_st8_2 = 1000.    !== radius of 2nd star in [1.e8 cm] ==!
-  !v6_ini = 80.d0     !== initial wind velocity [1.e6 cm/s] ==!
-  !n_w    = int(1.e3)       !== number of particles ==!
   !================!
 
   a8 = 2.9d3 * m_1**(1./3) * (1.d0+m_2/m_1)**(1./3) * P_day**(2./3)  !== separation b/w stars ==!
