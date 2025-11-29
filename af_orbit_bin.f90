@@ -144,16 +144,20 @@ implicit none
 real*8::stat(4),m_1,m_2,P_day,v6_ini
 integer::n_w
   201 format (8(es11.4,"   "))
-  n_w = int(8.e3)
+  n_w = int(1.e5)
   m_1 = 2.d0     !== NS mass ==!
   m_2 = 8.d0     !== companion mass: NGC 7793 P13 - 10.-20.; M51 ULX-7 >8. ==!
-  P_day = 5.d0  !5.7d0   !== NGC 5907 ULX-1: 5.66; NGC 7793 P13 - 65; M51 ULX7 - 2  ==!
+  P_day = 5.d0   !5.7d0   !== NGC 5907 ULX-1: 5.66; NGC 7793 P13 - 65; M51 ULX7 - 2  ==!
   v6_ini = 150.d0
   write(*,*)"# P_day, v6_ini, outflow frac, abs frac"
-  do while(v6_ini.le.250.d0)
-    call trace_particle_in_binary(stat,m_1,m_2,P_day,v6_ini,n_w)
-    write(*,201)P_day,v6_ini,stat(1:2)
-    v6_ini = v6_ini*1.1
+  do while( P_day.le.50.d0 )
+    v6_ini = 150.d0
+    do while(v6_ini.le.250.d0)
+      call trace_particle_in_binary(stat,m_1,m_2,P_day,v6_ini,n_w)
+      write(*,201)P_day,v6_ini,stat(1:2)
+      v6_ini = v6_ini*1.1
+    end do
+    P_day = P_day * 1.1d0
   end do
 return
 end subroutine binary_wind_accreretion
