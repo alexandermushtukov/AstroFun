@@ -2,11 +2,14 @@
 !==========================================================================================================
 subroutine test_acc_atm_structure()
 implicit none
-real*8::mas_x_rho_tau_2(10000,5),x_scale,F_tau(10000,2)
-real*8::rho_min,rho_max,g14,T_keV,dot_m_6,ln_Lambda,m,R6,mas_tau_TkeV(100,2)
-integer::i
+real*8,allocatable::mas_x_rho_tau_2(:,:),F_tau(:,:)
+real*8::rho_min,rho_max,g14,T_keV,dot_m_6,ln_Lambda,m,R6,mas_tau_TkeV(100,2),x_scale
+integer::i,n
+  n = 1000
+  allocate( mas_x_rho_tau_2(n,5),F_tau(n,2) )
+
   m = 1.4d0; R6 = 1.d0
-  dot_m_6 = 10.d0
+  dot_m_6 = 1.d0
   g14 = 1.328d0*m/R6**2
   T_keV = 100.d0
   ln_Lambda = 40.d0        !== Coulomb logarithm ==!
@@ -19,12 +22,12 @@ integer::i
 
   rho_min = 0.7d-4*dot_m_6
   rho_max = 1.d+1
-  !call acc_atm_structure_2(mas_x_rho_tau_2,10000,rho_min,rho_max,x_scale,g14,T_keV,dot_m_6,ln_Lambda,F_tau)
-  call acc_atm_structure_3(mas_x_rho_tau_2,10000,rho_min,rho_max,x_scale,g14,mas_tau_TkeV,100,dot_m_6,ln_Lambda,F_tau)
+  !call acc_atm_structure_2(mas_x_rho_tau_2,n,rho_min,rho_max,x_scale,g14,T_keV,dot_m_6,ln_Lambda,F_tau)
+  call acc_atm_structure_3(mas_x_rho_tau_2,n,rho_min,rho_max,x_scale,g14,mas_tau_TkeV,100,dot_m_6,ln_Lambda,F_tau)
   i = 1
-  do while(i.le.10000)
-    !write(*,*)mas_x_rho_tau_2(i,1:5);! read(*,*)
-    write(*,*)F_tau(i,1:2)
+  do while(i.le.n)
+    write(*,*)i,mas_x_rho_tau_2(i,1:2);! read(*,*)
+    !write(*,*)i,F_tau(i,1:2)
     i=i+10
   end do
   write(*,*)
@@ -154,7 +157,6 @@ real*8::rho,rho2,dx,x,drho,drho2,tau2,x_min,x_max,T_keV
 integer::i
 real*8::beta_ff,beta,Z,dbeta_dx,dTkeV_dx,T_keV_,T_keV_0,eps24,F_tau(n,2)
 real*8::find_H_ordered_inc  !== function ==!
-!write(*,*)"#C1",g14,mas_tau_TkeV(1,2),n_mas
 
   beta_ff = 0.5d0
   Z = 1.d0
@@ -169,7 +171,9 @@ real*8::find_H_ordered_inc  !== function ==!
   tau2 = 0.d0     !== local optical depth ==!
   beta = beta_ff
   rho2 = rho_min !1.d-4
+!write(*,*)rho_min,rho_max; read(*,*)
   do while(rho.lt.rho_max)
+!write(*,*)beta,rho2; read(*,*)
     dbeta_dx = 3.24d-4*rho2*Z**2/beta**3*ln_Lambda
     beta = max(0.d0,beta - dx*dbeta_dx)
     if( beta.gt.0.d0 )then
@@ -250,14 +254,9 @@ integer::i
   call acc_atm_structure_3(mas_x_rho_tau_2,n,rho_min,rho_max,x_scale,g14,mas_tau_TkeV,n_mas,dot_m_6,ln_Lambda,F_tau_eps)
   mas_tau_rho(1:n,1)=mas_x_rho_tau_2(1:n,3)
   mas_tau_rho(1:n,2)=mas_x_rho_tau_2(1:n,2)
-  !write(*,*)mas_tau_rho(1:4,1)
-  !write(*,*)mas_tau_rho(1:4,2)
-  !  write(*,*)mas_tau_rho(1:10,2)
   i=1
   do while(i.le.n_mas)
     mas_rho(i) = find_H_ordered_inc(mas_tau_TkeV(i,1),mas_tau_rho,n)
-    !write(*,*)"## ",i,n,mas_rho(i),mas_tau_TkeV(i,1), mas_tau_TkeV(n_mas,1)
-    !read(*,*)
     i=i+1
   end do
 return
