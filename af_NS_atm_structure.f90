@@ -1,10 +1,10 @@
 !==========================================================================================================!
 ! ...
-! mas_x_rho_tau_2(n,1) - x
-! mas_x_rho_tau_2(n,2) - rho
-! mas_x_rho_tau_2(n,3) - tau
-! mas_x_rho_tau_2(n,4) - eps24
-! mas_x_rho_tau_2(n,5) - T_keV (?)
+!   mas_x_rho_tau_2(n,1) - x
+!   mas_x_rho_tau_2(n,2) - rho
+!   mas_x_rho_tau_2(n,3) - tau
+!   mas_x_rho_tau_2(n,4) - eps24
+!   mas_x_rho_tau_2(n,5) - T_keV (?)
 !==========================================================================================================
 subroutine test_acc_atm_structure()
 implicit none
@@ -15,10 +15,10 @@ integer::i,n
   allocate( mas_x_rho_tau_2(n,5),F_tau(n,2) )
 
   m = 1.4d0; R6 = 1.d0
-  dot_m_6 = 1.1d0
+  dot_m_6 = 1.d0
   g14 = 1.328d0*m/R6**2
-  T_keV = 10.d0
-  ln_Lambda = 40.d0        !== Coulomb logarithm ==!
+  T_keV = 1.d0
+  ln_Lambda = 10.d0        !== Coulomb logarithm ==!
 
   i=1
   do while(i.le.100)
@@ -34,7 +34,7 @@ integer::i,n
                               g14,mas_tau_TkeV,100,dot_m_6,ln_Lambda,rho_min,F_tau)
   i = 2
   do while(i.le.n-1)
-    drhodx = ( mas_x_rho_tau_2(i,3) - mas_x_rho_tau_2(i-1,3) )/( mas_x_rho_tau_2(i,1) - mas_x_rho_tau_2(i-1,1) )
+    drhodx = ( mas_x_rho_tau_2(i,2) - mas_x_rho_tau_2(i-1,2) )/( mas_x_rho_tau_2(i,1) - mas_x_rho_tau_2(i-1,1) )
     write(*,*)mas_x_rho_tau_2(i,1:3),drhodx;! read(*,*)
     !write(*,*)i,F_tau(i,1:2)
     i=i+10
