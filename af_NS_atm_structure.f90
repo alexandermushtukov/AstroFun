@@ -9,16 +9,23 @@
 subroutine test_acc_atm_structure()
 implicit none
 real*8,allocatable::mas_x_rho_tau_2(:,:),F_tau(:,:)
-real*8::rho_min,rho_max,g14,T_keV,dot_m_6,ln_Lambda,m,R6,mas_tau_TkeV(100,2),x_scale,drhodx
+real*8::rho_min,rho_max,g14,B12,T_keV,dot_m_6,ln_Lambda,m,R6,mas_tau_TkeV(100,2),x_scale,drhodx,dx,dlnrho,Hp,P,A,Z,E,rho_v,theta
 integer::i,n
-  n = 1000
+real*8::vacuum_res_P_jump !== functions ==!
+  n = 2000
   allocate( mas_x_rho_tau_2(n,5),F_tau(n,2) )
 
   m = 1.4d0; R6 = 1.d0
-  dot_m_6 = 1.d0
+  dot_m_6 = 0.1d0
   g14 = 1.328d0*m/R6**2
   T_keV = 1.d0
   ln_Lambda = 10.d0        !== Coulomb logarithm ==!
+  Z = 1.d0;  A = 1.d0
+  B12 = 2.d0
+
+  E = 1.d0
+  theta = 1.d0
+  rho_v = 9.64d-5/(Z/A) * B12**2 * E**2
 
   i=1
   do while(i.le.100)
@@ -30,12 +37,20 @@ integer::i,n
   rho_max = 1.d+1
   !call acc_atm_structure_2(mas_x_rho_tau_2,n,rho_min,rho_max,x_scale,g14,T_keV,dot_m_6,ln_Lambda,F_tau)
   !call acc_atm_structure_3(mas_x_rho_tau_2,n,rho_min,rho_max,x_scale,g14,mas_tau_TkeV,100,dot_m_6,ln_Lambda,F_tau)
-   call acc_atm_structure_4(mas_x_rho_tau_2,n,1.d-2,5.d2,x_scale, &
+   call acc_atm_structure_4(mas_x_rho_tau_2,n,1.d-3,5.d2,x_scale, &
                               g14,mas_tau_TkeV,100,dot_m_6,ln_Lambda,rho_min,F_tau)
   i = 2
   do while(i.le.n-1)
     drhodx = ( mas_x_rho_tau_2(i,2) - mas_x_rho_tau_2(i-1,2) )/( mas_x_rho_tau_2(i,1) - mas_x_rho_tau_2(i-1,1) )
-    write(*,*)mas_x_rho_tau_2(i,1:3),drhodx;! read(*,*)
+    dx     = mas_x_rho_tau_2(i,1) - mas_x_rho_tau_2(i-1,1)
+    dlnrho = log(mas_x_rho_tau_2(i,2)) - log(mas_x_rho_tau_2(i-1,2))
+    if (abs(dlnrho) > 0.d0) then
+      Hp = abs(dx / dlnrho)
+    else
+      Hp = huge(1.d0)
+    end if
+    P = vacuum_res_P_jump(E,B12,theta,Z,A,Hp)
+    write(*,*)mas_x_rho_tau_2(i,1:3),drhodx,rho_v,P;! read(*,*)
     !write(*,*)i,F_tau(i,1:2)
     i=i+10
   end do
