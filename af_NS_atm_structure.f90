@@ -1,5 +1,5 @@
 !==========================================================================================================!
-! ...
+! The subroutine calculates structure of NS atmosphere
 !   mas_x_rho_tau_2(n,1) - x
 !   mas_x_rho_tau_2(n,2) - rho
 !   mas_x_rho_tau_2(n,3) - tau
@@ -37,8 +37,8 @@ real*8::vacuum_res_P_jump !== functions ==!
   rho_max = 1.d+1
   !call acc_atm_structure_2(mas_x_rho_tau_2,n,rho_min,rho_max,x_scale,g14,T_keV,dot_m_6,ln_Lambda,F_tau)
   !call acc_atm_structure_3(mas_x_rho_tau_2,n,rho_min,rho_max,x_scale,g14,mas_tau_TkeV,100,dot_m_6,ln_Lambda,F_tau)
-   call acc_atm_structure_4(mas_x_rho_tau_2,n,1.d-3,5.d2,x_scale, &
-                              g14,mas_tau_TkeV,100,dot_m_6,ln_Lambda,rho_min,F_tau)
+  call acc_atm_structure_4(mas_x_rho_tau_2,n,1.d-3,5.d2,x_scale, &
+                           g14,mas_tau_TkeV,100,0.d0,ln_Lambda,0.d0,F_tau)
   i = 2
   do while(i.le.n-1)
     drhodx = ( mas_x_rho_tau_2(i,2) - mas_x_rho_tau_2(i-1,2) )/( mas_x_rho_tau_2(i,1) - mas_x_rho_tau_2(i-1,1) )
@@ -272,28 +272,27 @@ end subroutine acc_atm_structure_3
 !============================================================================================
 subroutine acc_atm_structure_4(mas_x_rho_tau_2,n,tau_min,tau_max,x_scale, &
                               g14,mas_tau_TkeV,n_mas,dot_m_6,ln_Lambda,rho0,F_tau)
-  implicit none
+implicit none
+integer, intent(in)  :: n, n_mas
+real*8,  intent(in)  :: tau_min, tau_max, g14, dot_m_6, ln_Lambda, rho0
+real*8,  intent(in)  :: mas_tau_TkeV(n_mas,2)
 
-  integer, intent(in)  :: n, n_mas
-  real*8,  intent(in)  :: tau_min, tau_max, g14, dot_m_6, ln_Lambda, rho0
-  real*8,  intent(in)  :: mas_tau_TkeV(n_mas,2)
+real*8,  intent(out) :: mas_x_rho_tau_2(n,5), x_scale
+real*8,  intent(out) :: F_tau(n,2)
 
-  real*8,  intent(out) :: mas_x_rho_tau_2(n,5), x_scale
-  real*8,  intent(out) :: F_tau(n,2)
+! local
+integer :: i, steps, max_steps, k
+real*8  :: dx, x, x_old
+real*8  :: tau2, tau_old, target_tau, f
+real*8  :: rho2, rho_old, drho2
+real*8  :: beta, beta_ff, dbeta_dx, Z
+real*8  :: T_keV, T_keV_, T_old
+real*8  :: eps24, eps_old
+real*8  :: rho_floor, beta_floor, T_floor
+real*8  :: tau_targets(n), log_ratio, expo
 
-  ! local
-  integer :: i, steps, max_steps, k
-  real*8  :: dx, x, x_old
-  real*8  :: tau2, tau_old, target_tau, f
-  real*8  :: rho2, rho_old, drho2
-  real*8  :: beta, beta_ff, dbeta_dx, Z
-  real*8  :: T_keV, T_keV_, T_old
-  real*8  :: eps24, eps_old
-  real*8  :: rho_floor, beta_floor, T_floor
-  real*8  :: tau_targets(n), log_ratio, expo
-
-  real*8  :: find_H_ordered_inc
-  external :: find_H_ordered_inc
+real*8  :: find_H_ordered_inc
+external :: find_H_ordered_inc
 
   rho_floor  = 1.d-30
   beta_floor = 1.d-30
