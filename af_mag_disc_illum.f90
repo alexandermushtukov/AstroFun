@@ -830,14 +830,14 @@ contains
     close(10)
   return
   end subroutine test_xray_disk_mc_profile
-
-
-
 end module xray_disk_mc_module
 
 
 
+
 !=================================================================================
+!
+!
 !=================================================================================
 subroutine test_AC()
 use omp_lib
@@ -858,20 +858,20 @@ integer, parameter :: dp = kind(1.0d0)
   real(dp), parameter :: R_NS = 1.0d6
 
   real(dp), parameter :: R_COL = 1.0d4
-  real(dp), parameter :: H_COL = 3.0d5
+  real(dp), parameter :: H_COL = 2.0d5
 
-  real(dp), parameter :: MDOT_COL = 1.0d16
+  real(dp), parameter :: MDOT_COL = 7.0d16
 
   integer, parameter :: NR = 40
   integer, parameter :: NZ = 80
 
-  integer, parameter :: N_PACKETS = 150000
-  integer, parameter :: N_ITER    = 200
+  integer, parameter :: N_PACKETS = 5000
+  integer, parameter :: N_ITER    = 50
 
   real(dp), parameter :: OPACITY_SCALE = 1.0d0
 
-  integer, parameter :: MAX_SCATTERS = 15000
-  integer, parameter :: MAX_STEPS    = 30000
+  integer, parameter :: MAX_SCATTERS = 500000
+  integer, parameter :: MAX_STEPS    = 300000
 
   real(dp), parameter :: V_MIN = 1.0d6
   real(dp), parameter :: VELOCITY_RELAX = 0.03d0
@@ -999,6 +999,8 @@ integer, parameter :: dp = kind(1.0d0)
   allocate(side_thr(NZ,N_STREAMS))
   allocate(scatter_thr(0:MAX_SCATTERS+1,N_STREAMS))
 
+  dv_dz_residual = 0.0d0
+  call write_velocity_profile(0)
   do iteration = 1, N_ITER
 
      write(*,*)
@@ -1064,9 +1066,9 @@ integer, parameter :: dp = kind(1.0d0)
      side_thr = 0.0d0
      scatter_thr = 0
 
-!$omp parallel default(shared) private(k)
+     !$omp parallel default(shared) private(k)
      call mc_parallel_loop()
-!$omp end parallel
+     !$omp end parallel
 
      u_accum = sum(u_thr, dim=3)
      Fr_accum = sum(Fr_thr, dim=3)
@@ -1130,40 +1132,50 @@ integer, parameter :: dp = kind(1.0d0)
            v_target(i,j) = max(v_target(i,j), V_MIN)
            v_target(i,j) = min(v_target(i,j), v_ff_grid(i,j))
 
-! ========================================================
-! Under-relaxation with limited velocity correction
-! ========================================================
-dv_raw = VELOCITY_RELAX * (v_target(i,j) - v_grid(i,j))
-
-! Limit change to 5 percent per iteration
-dv_lim = 0.05d0 * v_grid(i,j)
-
-if (dv_raw > dv_lim) then
-   dv_raw = dv_lim
-end if
-
-if (dv_raw < -dv_lim) then
-   dv_raw = -dv_lim
-end if
-
-v_new(i,j) = v_grid(i,j) + dv_raw
-
+    !========================================================
+    ! Under-relaxation with limited velocity correction
+    !========================================================
+    dv_raw = VELOCITY_RELAX * (v_target(i,j) - v_grid(i,j))
+    ! Limit change to 5 percent per iteration
+    dv_lim = 0.10d0 * v_grid(i,j)
+    if (dv_raw > dv_lim) then
+      dv_raw = dv_lim
+    end if
+    if (dv_raw < -dv_lim) then
+      dv_raw = -dv_lim
+    end if
+    v_new(i,j) = v_grid(i,j) + dv_raw
         end do
      end do
 
      call smooth_z(v_new)
 
      v_grid = v_new
-
+     call write_velocity_profile(iteration)
      scatter_hist = scatter_hist + sum(scatter_thr, dim=2)
-
   end do
-
   call write_outputs()
-
   deallocate(u_thr, Fr_thr, Fz_thr, visit_thr, side_thr, scatter_thr)
 
 contains
+  !==================================================================
+  !==================================================================
+  subroutine write_velocity_profile(iter)
+  integer, intent(in) :: iter
+  integer :: jj, unit
+  character(len=256) :: fname
+    write(fname,'("./res/AC_gif/velocity_profile_iter_",I4.4,".dat")') iter
+    open(newunit=unit, file=fname, status="replace", action="write")
+    write(unit,'(A)') "# z  v_center  v_r_one_third  v_freefall  residual_r_one_third"
+    do jj = 1, NZ
+       write(unit,'(5ES24.15)') z_cent(jj), &
+                              v_grid(1,jj), &
+                              v_grid(i_vprof,jj), &
+                              v_ff_profile(jj), &
+                              dv_dz_residual(i_vprof,jj)
+    end do
+    close(unit)
+  end subroutine write_velocity_profile
 
   real(dp) function gravity(z)
     real(dp), intent(in) :: z
@@ -1538,8 +1550,9 @@ contains
 
     open(newunit=unit, file="./res/text_AC", status="replace", action="write")
     do jj = 1, NZ
-      write(unit,'(4ES24.15)') z_cent(jj), v_grid(1,jj), v_grid(i_vprof,jj), &
-                            dv_dz_residual(i_vprof,jj)
+      write(unit,'(6ES24.15)') z_cent(jj), v_grid(1,jj), v_grid(i_vprof,jj), &
+                            dv_dz_residual(i_vprof,jj), &
+                            dv_dz_grid(i_vprof,jj) , dv_dz_suggested(i_vprof,jj)
     end do
     close(unit)
 
