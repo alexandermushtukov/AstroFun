@@ -1,33 +1,28 @@
+!=======================================================================================
+! Monte-Carlo X-ray disk irradiation kernel ported from the provided Python script.
+! Public API:
+!   call xray_disk_mc_profile(..., profile, ierr)
+! Output profile(i,1:7):
+!   1  R_cm
+!   2  F_viscous_erg_s_cm2
+!   3  F_direct_irradiation_erg_s_cm2
+!   4  F_scattered_irradiation_erg_s_cm2
+!   5  T_viscous_K
+!   6  T_direct_irradiation_K
+!   7  T_scattered_irradiation_K
+! No plotting, no file I/O, no terminal output.
+!=======================================================================================
 module xray_disk_mc_module
-  !! Monte-Carlo X-ray disk irradiation kernel ported from the provided Python script.
-  !!
-  !! Public API:
-  !!   call xray_disk_mc_profile(..., profile, ierr)
-  !!
-  !! Output profile(i,1:7):
-  !!   1  R_cm
-  !!   2  F_viscous_erg_s_cm2
-  !!   3  F_direct_irradiation_erg_s_cm2
-  !!   4  F_scattered_irradiation_erg_s_cm2
-  !!   5  T_viscous_K
-  !!   6  T_direct_irradiation_K
-  !!   7  T_scattered_irradiation_K
-  !!
-  !! No plotting, no file I/O, no terminal output.
-
-  use, intrinsic :: iso_fortran_env, only: real64, int32
-  implicit none
-  private
-
-  public :: xray_disk_mc_profile,test_xray_disk_mc_profile
-
-  integer, parameter :: dp = real64
-
-  real(dp), parameter :: pi = 3.141592653589793238462643383279502884197_dp
-  real(dp), parameter :: mec2_kev = 511.0_dp
-  real(dp), parameter :: sigma_sb_cgs = 5.670374419e-5_dp
-  real(dp), parameter :: g_cgs = 6.67430e-8_dp
-  real(dp), parameter :: m_sun_g = 1.98847e33_dp
+use, intrinsic :: iso_fortran_env, only: real64, int32
+implicit none
+private
+public :: xray_disk_mc_profile,test_xray_disk_mc_profile
+integer, parameter :: dp = real64
+real(dp), parameter :: pi = 3.141592653589793238462643383279502884197_dp
+real(dp), parameter :: mec2_kev = 511.0_dp
+real(dp), parameter :: sigma_sb_cgs = 5.670374419e-5_dp
+real(dp), parameter :: g_cgs = 6.67430e-8_dp
+real(dp), parameter :: m_sun_g = 1.98847e33_dp
 
   integer, parameter :: max_steps_default = 1000000
   integer, parameter :: max_internal_scatters_default = 100000
@@ -238,9 +233,11 @@ contains
 
        ok_stop = ray_sphere_first_intersection(pos, dir, r_stop, advance_dist, t_stop)
        ok_ns   = ray_sphere_first_intersection(pos, dir, R_ns,   advance_dist, t_ns)
-       ok_m    = ray_dipole_first_intersection(pos, dir, Rm, step_coarse, tol, advance_dist, merge(t_stop, huge(1.0_dp), ok_stop), t_m)
+       ok_m    = ray_dipole_first_intersection(pos, dir, Rm, step_coarse, tol, advance_dist, &
+                    merge(t_stop, huge(1.0_dp), ok_stop), t_m)
        ok_disk = ray_flared_disk_first_intersection(pos, dir, Rm, Lx, R_ns_km, alpha, mstar, &
-            advance_dist, merge(t_stop, huge(1.0_dp), ok_stop), step_coarse, tol, disk_rho_max_model, t_disk, disk_rho, side_sign)
+            advance_dist, merge(t_stop, huge(1.0_dp), ok_stop), step_coarse, tol, disk_rho_max_model, &
+            t_disk, disk_rho, side_sign)
 
        if (.not. ok_stop .and. .not. ok_ns .and. .not. ok_m .and. .not. ok_disk) exit
 
@@ -585,7 +582,8 @@ contains
     root = 0.5_dp*(lo+hi)
   end function bisect_disk_root
 
-  function ray_flared_disk_first_intersection(p0,n_dir,Rm,Lx,Rnskm,alpha,mstar,t_min,t_max,step_coarse,tol,rho_max_model,t_hit,rho_hit,side_hit) result(ok)
+  function ray_flared_disk_first_intersection(p0,n_dir,Rm,Lx,Rnskm,alpha,mstar,t_min,t_max,&
+                                              step_coarse,tol,rho_max_model,t_hit,rho_hit,side_hit) result(ok)
     real(dp), intent(in) :: p0(3), n_dir(3), Rm, Lx, Rnskm, alpha, mstar, t_min, t_max, step_coarse, tol, rho_max_model
     real(dp), intent(out) :: t_hit, rho_hit, side_hit
     logical :: ok
@@ -737,7 +735,7 @@ contains
     n = normalize(n)
   end function dipole_surface_normal
 
-  subroutine transport_through_layer(tau0, direction_in, E_in, normal, n_out, E_out, n_internal, e_dep, entry_sign, exit_side, status)
+  subroutine transport_through_layer(tau0,direction_in,E_in,normal,n_out,E_out,n_internal,e_dep,entry_sign,exit_side,status)
     real(dp), intent(in) :: tau0, direction_in(3), E_in, normal(3)
     real(dp), intent(out) :: n_out(3), E_out, e_dep
     integer, intent(out) :: n_internal, entry_sign, exit_side, status
@@ -814,15 +812,15 @@ contains
   integer :: ierr,i
   real(8) :: profile(nbins,7)
     call xray_disk_mc_profile( &
-        N       = int(5.e5), &
-        L39     = 0.001d0, &
+        N       = int(5.e7), &
+        L39     = 0.0001d0, &
         B12     = 3.0d0, &
         T_keV   = 5.0d0, &
         nbins   = nbins, &
-        profile = profile, disk_rho_max_factor = 100.d0, &
+        profile = profile, disk_rho_max_factor = 10.d0, &
         ierr    = ierr )
     if (ierr /= 0) stop 'xray_disk_mc_profile failed'
-    open(unit=10, file='./res/xray_disk_profile_L1e36_B3e12', status='replace')
+    open(unit=10, file='./res/xray_disk_profile_L1e35_B3e12_', status='replace')
     do i = 1, nbins
       write(10,'(7E20.10)') profile(i,1), profile(i,2), profile(i,3), profile(i,4), &
                             profile(i,5), profile(i,6), profile(i,7)
@@ -834,336 +832,358 @@ end module xray_disk_mc_module
 
 
 
-
-!=================================================================================
-!
-!
-!=================================================================================
+!===========================================================================
+!===========================================================================
 subroutine test_AC()
 use omp_lib
 use iso_fortran_env, only: int64
 implicit none
 integer, parameter :: dp = kind(1.0d0)
-  real(dp), parameter :: G        = 6.67430d-8
-  real(dp), parameter :: c_light  = 2.99792458d10
-  real(dp), parameter :: sigma_T  = 6.6524587321d-25
-  real(dp), parameter :: m_p      = 1.67262192369d-24
-  real(dp), parameter :: k_B      = 1.380649d-16
-  real(dp), parameter :: a_rad    = 7.5657d-15
-  real(dp), parameter :: M_sun    = 1.98847d33
-  real(dp), parameter :: erg_keV  = 1.602176634d-9
-  real(dp), parameter :: pi       = 3.1415926535897932384626433832795d0
+real(dp), parameter :: G        = 6.67430d-8
+real(dp), parameter :: c_light  = 2.99792458d10
+real(dp), parameter :: sigma_T  = 6.6524587321d-25
+real(dp), parameter :: m_p      = 1.67262192369d-24
+real(dp), parameter :: k_B      = 1.380649d-16
+real(dp), parameter :: a_rad    = 7.5657d-15
+real(dp), parameter :: M_sun    = 1.98847d33
+real(dp), parameter :: erg_keV  = 1.602176634d-9
+real(dp), parameter :: pi       = 3.1415926535897932384626433832795d0
 
-  real(dp), parameter :: M_NS = 1.4d0 * M_sun
-  real(dp), parameter :: R_NS = 1.0d6
+real(dp), parameter :: M_NS = 1.4d0 * M_sun
+real(dp), parameter :: R_NS = 1.0d6
 
-  real(dp), parameter :: R_COL = 1.0d4
-  real(dp), parameter :: H_COL = 2.0d5
+real(dp), parameter :: R_COL = 1.0d4
+real(dp), parameter :: H_COL = 3.0d5
 
-  real(dp), parameter :: MDOT_COL = 7.0d16
+real(dp), parameter :: MDOT_COL = 5.d17
 
-  integer, parameter :: NR = 40
-  integer, parameter :: NZ = 80
+integer, parameter :: NR = 40
+integer, parameter :: NZ = 120
 
-  integer, parameter :: N_PACKETS = 5000
-  integer, parameter :: N_ITER    = 50
+integer, parameter :: N_PACKETS = 10000 !30000 !15000
+integer, parameter :: N_ITER    = 200
 
-  real(dp), parameter :: OPACITY_SCALE = 1.0d0
+real(dp), parameter :: OPACITY_SCALE = 1.0d0
 
-  integer, parameter :: MAX_SCATTERS = 500000
-  integer, parameter :: MAX_STEPS    = 300000
+integer, parameter :: MAX_SCATTERS = 1000000
+integer, parameter :: MAX_STEPS    = 1000000
 
-  real(dp), parameter :: V_MIN = 1.0d6
-  real(dp), parameter :: VELOCITY_RELAX = 0.03d0
+real(dp), parameter :: V_MIN = 1.0d6
+real(dp), parameter :: VELOCITY_RELAX = 0.07d0 !0.07d0
+real(dp), parameter :: TEMP_AVG_ALPHA = 0.3d0
 
-  integer, parameter :: N_STREAMS = 8
+integer, parameter :: N_STREAMS = 20
 
-  real(dp) :: r_edges(0:NR), z_edges(0:NZ)
-  real(dp) :: r_cent(NR), z_cent(NZ)
-  real(dp) :: dr, dz
+real(dp) :: r_edges(0:NR), z_edges(0:NZ)
+real(dp) :: r_cent(NR), z_cent(NZ)
+real(dp) :: dr, dz
 
-  real(dp) :: cell_vol(NR,NZ)
-  real(dp) :: ring_area(NR)
-  real(dp) :: side_area_zbin
+real(dp) :: cell_vol(NR,NZ)
+real(dp) :: ring_area(NR)
+real(dp) :: side_area_zbin
 
-  real(dp) :: R2D(NR,NZ), Z2D(NR,NZ)
-  real(dp) :: g_grid(NR,NZ)
-  real(dp) :: v_ff_profile(NZ)
-  real(dp) :: v_ff_grid(NR,NZ)
+real(dp) :: R2D(NR,NZ), Z2D(NR,NZ)
+real(dp) :: g_grid(NR,NZ)
+real(dp) :: v_ff_profile(NZ)
+real(dp) :: v_ff_grid(NR,NZ)
 
-  real(dp) :: v_grid(NR,NZ), v_new(NR,NZ), v_target(NR,NZ)
-  real(dp) :: rho_grid(NR,NZ), ne_grid(NR,NZ), alpha_grid(NR,NZ)
-  real(dp) :: dv_dz_grid(NR,NZ)
+real(dp) :: v_grid(NR,NZ), v_new(NR,NZ), v_target(NR,NZ)
+real(dp) :: rho_grid(NR,NZ), ne_grid(NR,NZ), alpha_grid(NR,NZ)
+real(dp) :: dv_dz_grid(NR,NZ)
 
-  real(dp) :: q_grid(NR,NZ), lum_cells(NR,NZ)
-  real(dp) :: u_accum(NR,NZ), Fr_accum(NR,NZ), Fz_accum(NR,NZ)
-  real(dp) :: u_rad(NR,NZ), Fr(NR,NZ), Fz(NR,NZ)
-  real(dp) :: T_K(NR,NZ), T_keV(NR,NZ)
-  real(dp) :: P_gas(NR,NZ), P_rad(NR,NZ)
-  real(dp) :: dPgas_dz(NR,NZ), dPrad_dz(NR,NZ)
-  real(dp) :: dv_dz_suggested(NR,NZ)
+real(dp) :: q_grid(NR,NZ), lum_cells(NR,NZ)
+real(dp) :: u_accum(NR,NZ), Fr_accum(NR,NZ), Fz_accum(NR,NZ)
+real(dp) :: u_rad(NR,NZ), Fr(NR,NZ), Fz(NR,NZ)
+real(dp) :: u_rad_avg(NR,NZ)
+real(dp) :: u_rad_used(NR,NZ)
+logical :: have_u_rad_avg
+real(dp) :: T_K(NR,NZ), T_keV(NR,NZ)
+real(dp) :: P_gas(NR,NZ), P_rad(NR,NZ)
+real(dp) :: dPgas_dz(NR,NZ), dPrad_dz(NR,NZ)
+real(dp) :: dv_dz_suggested(NR,NZ)
 
-  real(dp), allocatable :: u_thr(:,:,:), Fr_thr(:,:,:), Fz_thr(:,:,:)
-  real(dp), allocatable :: visit_thr(:,:,:), side_thr(:,:)
+real(dp), allocatable :: u_thr(:,:,:), Fr_thr(:,:,:), Fz_thr(:,:,:)
+real(dp), allocatable :: visit_thr(:,:,:), side_thr(:,:)
 
-  real(dp) :: cell_cdf(NR*NZ)
-  real(dp) :: base_ring_cdf(NR)
-  real(dp) :: base_lum_rings(NR)
+real(dp) :: cell_cdf(NR*NZ)
+real(dp) :: base_ring_cdf(NR)
+real(dp) :: base_lum_rings(NR)
 
-  real(dp) :: L_volume, L_base, L_total
-  real(dp) :: packet_luminosity, p_base
-  real(dp) :: tau_radial_mean, tau_vertical_mean
+real(dp) :: L_volume, L_base, L_total
+real(dp) :: packet_luminosity, p_base
+real(dp) :: tau_radial_mean, tau_vertical_mean
 
-  real(dp) :: area_col
-  real(dp) :: rho_base(NR), v_base(NR), mdot_ring(NR)
+real(dp) :: area_col
+real(dp) :: rho_base(NR), v_base(NR), mdot_ring(NR)
 
-  integer :: i, j, k, iteration
-  integer :: i_vprof
+integer :: i, j, k, iteration
+integer :: i_vprof
 
-  integer(int64) :: seeds(N_STREAMS)
+integer(int64) :: seeds(N_STREAMS)
 
-  integer :: scatter_hist(0:MAX_SCATTERS+1)
-  integer, allocatable :: scatter_thr(:,:)
+integer :: scatter_hist(0:MAX_SCATTERS+1)
+integer, allocatable :: scatter_thr(:,:)
 
-  real(dp) :: dv_dz_residual(NR,NZ)
-  real(dp) :: iter_metric
-  real(dp), parameter :: RES_EPS = 1.0d-30
-  real(dp) :: dv_raw, dv_lim
+real(dp) :: dv_dz_residual(NR,NZ)
+real(dp) :: iter_metric
+real(dp), parameter :: RES_EPS = 1.0d-30
+real(dp) :: dv_raw, dv_lim
 
-  call execute_command_line("mkdir -p ./res")
+call execute_command_line("mkdir -p ./res")
+call execute_command_line("mkdir -p ./res/AC_gif")
 
-  call omp_set_num_threads(N_STREAMS)
+call omp_set_num_threads(N_STREAMS)
 
-  scatter_hist = 0
+scatter_hist = 0
 
-  do i = 0, NR
-     r_edges(i) = R_COL * real(i,dp) / real(NR,dp)
-  end do
+do i = 0, NR
+   r_edges(i) = R_COL * real(i,dp) / real(NR,dp)
+end do
 
-  do j = 0, NZ
-     z_edges(j) = H_COL * real(j,dp) / real(NZ,dp)
-  end do
+do j = 0, NZ
+   z_edges(j) = H_COL * real(j,dp) / real(NZ,dp)
+end do
 
-  do i = 1, NR
-     r_cent(i) = 0.5d0 * (r_edges(i-1) + r_edges(i))
-  end do
+do i = 1, NR
+   r_cent(i) = 0.5d0 * (r_edges(i-1) + r_edges(i))
+end do
 
-  do j = 1, NZ
-     z_cent(j) = 0.5d0 * (z_edges(j-1) + z_edges(j))
-  end do
+do j = 1, NZ
+   z_cent(j) = 0.5d0 * (z_edges(j-1) + z_edges(j))
+end do
 
-  dr = r_edges(1) - r_edges(0)
-  dz = z_edges(1) - z_edges(0)
+dr = r_edges(1) - r_edges(0)
+dz = z_edges(1) - z_edges(0)
 
-  do i = 1, NR
-     ring_area(i) = pi * (r_edges(i)**2 - r_edges(i-1)**2)
-  end do
+do i = 1, NR
+   ring_area(i) = pi * (r_edges(i)**2 - r_edges(i-1)**2)
+end do
 
-  do i = 1, NR
-     do j = 1, NZ
-        cell_vol(i,j) = ring_area(i) * dz
-        R2D(i,j) = r_cent(i)
-        Z2D(i,j) = z_cent(j)
-     end do
-  end do
+do i = 1, NR
+   do j = 1, NZ
+      cell_vol(i,j) = ring_area(i) * dz
+      R2D(i,j) = r_cent(i)
+      Z2D(i,j) = z_cent(j)
+   end do
+end do
 
-  side_area_zbin = 2.0d0 * pi * R_COL * dz
+side_area_zbin = 2.0d0 * pi * R_COL * dz
 
-  i_vprof = 1
-  do i = 1, NR
-     if (abs(r_cent(i) - R_COL/3.0d0) < abs(r_cent(i_vprof) - R_COL/3.0d0)) then
-        i_vprof = i
-     end if
-  end do
+i_vprof = 1
+do i = 1, NR
+   if (abs(r_cent(i) - R_COL/3.0d0) < abs(r_cent(i_vprof) - R_COL/3.0d0)) then
+      i_vprof = i
+   end if
+end do
 
-  do j = 1, NZ
-     v_ff_profile(j) = v_freefall(z_cent(j))
-  end do
+do j = 1, NZ
+   v_ff_profile(j) = v_freefall(z_cent(j))
+end do
 
-  do i = 1, NR
-     do j = 1, NZ
-        g_grid(i,j) = gravity(z_cent(j))
-        v_ff_grid(i,j) = v_ff_profile(j)
-        v_grid(i,j) = v_ff_grid(i,j)
-     end do
-  end do
+do i = 1, NR
+   do j = 1, NZ
+      g_grid(i,j) = gravity(z_cent(j))
+      v_ff_grid(i,j) = v_ff_profile(j)
+      v_grid(i,j) = v_ff_grid(i,j)
+   end do
+end do
 
-  do i = 1, N_STREAMS
-     seeds(i) = int(12345 + 104729*i, int64)
-  end do
+do i = 1, N_STREAMS
+   seeds(i) = int(12345 + 104729*i, int64)
+end do
 
-  allocate(u_thr(NR,NZ,N_STREAMS))
-  allocate(Fr_thr(NR,NZ,N_STREAMS))
-  allocate(Fz_thr(NR,NZ,N_STREAMS))
-  allocate(visit_thr(NR,NZ,N_STREAMS))
-  allocate(side_thr(NZ,N_STREAMS))
-  allocate(scatter_thr(0:MAX_SCATTERS+1,N_STREAMS))
+allocate(u_thr(NR,NZ,N_STREAMS))
+allocate(Fr_thr(NR,NZ,N_STREAMS))
+allocate(Fz_thr(NR,NZ,N_STREAMS))
+allocate(visit_thr(NR,NZ,N_STREAMS))
+allocate(side_thr(NZ,N_STREAMS))
+allocate(scatter_thr(0:MAX_SCATTERS+1,N_STREAMS))
 
-  dv_dz_residual = 0.0d0
-  call write_velocity_profile(0)
-  do iteration = 1, N_ITER
+dv_dz_residual = 0.0d0
+call write_velocity_profile(0)
+have_u_rad_avg = .false.
+u_rad_avg = 0.0d0
+u_rad_used = 0.0d0
 
-     write(*,*)
-     write(*,*) "================================================"
-     write(*,'(A,I4,A,I4)') "ITERATION ", iteration, " / ", N_ITER
-     write(*,*) "================================================"
+do iteration = 1, N_ITER
 
-     area_col = pi * R_COL**2
+   write(*,*)
+   write(*,*) "================================================"
+   write(*,'(A,I4,A,I4)') "ITERATION ", iteration, " / ", N_ITER
+   write(*,*) "================================================"
 
-     do i = 1, NR
-        do j = 1, NZ
-           rho_grid(i,j)   = MDOT_COL / (area_col * v_grid(i,j))
-           ne_grid(i,j)    = rho_grid(i,j) / m_p
-           alpha_grid(i,j) = OPACITY_SCALE * ne_grid(i,j) * sigma_T
-        end do
-     end do
+   area_col = pi * R_COL**2
 
-     tau_radial_mean   = sum(alpha_grid) / real(NR*NZ,dp) * R_COL
-     tau_vertical_mean = sum(alpha_grid) / real(NR*NZ,dp) * H_COL
-
-     write(*,'(A,ES12.4)') "Mean radial optical depth   = ", tau_radial_mean
-     write(*,'(A,ES12.4)') "Mean vertical optical depth = ", tau_vertical_mean
-
-     call gradient_z(v_grid, dv_dz_grid, dz)
-
-     do i = 1, NR
-        do j = 1, NZ
-           q_grid(i,j) = rho_grid(i,j) * v_grid(i,j) * &
-                         (g_grid(i,j) + v_grid(i,j) * dv_dz_grid(i,j))
-           if (q_grid(i,j) < 0.0d0) q_grid(i,j) = 0.0d0
-           lum_cells(i,j) = q_grid(i,j) * cell_vol(i,j)
-        end do
-     end do
-
-     L_volume = sum(lum_cells)
-
-     do i = 1, NR
-        v_base(i) = v_grid(i,1)
-        rho_base(i) = rho_grid(i,1)
-        mdot_ring(i) = rho_base(i) * v_base(i) * ring_area(i)
-        base_lum_rings(i) = 0.5d0 * mdot_ring(i) * v_base(i)**2
-     end do
-
-     L_base = sum(base_lum_rings)
-     L_total = L_volume + L_base
-
-     write(*,'(A,ES12.4)') "L_volume = ", L_volume
-     write(*,'(A,ES12.4)') "L_base   = ", L_base
-     write(*,'(A,ES12.4)') "L_total  = ", L_total
-
-     if (L_total <= 0.0d0) stop "ERROR: total luminosity is non-positive."
-
-     call build_cdf_2d(lum_cells, NR, NZ, cell_cdf)
-     call build_cdf_1d(base_lum_rings, NR, base_ring_cdf)
-
-     p_base = L_base / L_total
-     packet_luminosity = L_total / real(N_PACKETS,dp)
-
-     u_thr = 0.0d0
-     Fr_thr = 0.0d0
-     Fz_thr = 0.0d0
-     visit_thr = 0.0d0
-     side_thr = 0.0d0
-     scatter_thr = 0
-
-     !$omp parallel default(shared) private(k)
-     call mc_parallel_loop()
-     !$omp end parallel
-
-     u_accum = sum(u_thr, dim=3)
-     Fr_accum = sum(Fr_thr, dim=3)
-     Fz_accum = sum(Fz_thr, dim=3)
-
-     do i = 1, NR
-        do j = 1, NZ
-           u_rad(i,j) = u_accum(i,j) / cell_vol(i,j)
-           Fr(i,j)    = Fr_accum(i,j) / cell_vol(i,j)
-           Fz(i,j)    = Fz_accum(i,j) / cell_vol(i,j)
-        end do
-     end do
-
-     Fr(1,:) = 0.0d0
-
-     do i = 1, NR
-        do j = 1, NZ
-           T_K(i,j)   = max((u_rad(i,j)/a_rad)**0.25d0, 1.0d0)
-           T_keV(i,j) = k_B * T_K(i,j) / erg_keV
-           P_gas(i,j) = 2.0d0 * ne_grid(i,j) * k_B * T_K(i,j)
-           P_rad(i,j) = u_rad(i,j) / 3.0d0
-        end do
-     end do
-
-     call gradient_z(P_gas, dPgas_dz, dz)
-     call gradient_z(P_rad, dPrad_dz, dz)
-
-     do i = 1, NR
-        do j = 1, NZ
-           dv_dz_suggested(i,j) = - ( g_grid(i,j) + dPgas_dz(i,j)/rho_grid(i,j) &
-                                      + dPrad_dz(i,j)/rho_grid(i,j) ) &
-                                  / max(v_grid(i,j), 1.0d-30)
-        end do
-     end do
-
-    ! ========================================================
-    ! Iteration residual:
-    ! current velocity gradient versus target velocity gradient
-    ! ========================================================
-    do i = 1, NR
+   do i = 1, NR
       do j = 1, NZ
-        dv_dz_residual(i,j) = &
-             (dv_dz_grid(i,j) - dv_dz_suggested(i,j)) &
-             / max(abs(dv_dz_suggested(i,j)), RES_EPS)
-       end do
-    end do
-    iter_metric = sqrt(sum(dv_dz_residual**2) / real(NR*NZ, dp))
-    write(*,'(A,ES12.4)') "Velocity-gradient residual metric = ", iter_metric
+         rho_grid(i,j)   = MDOT_COL / (area_col * v_grid(i,j))
+         ne_grid(i,j)    = rho_grid(i,j) / m_p
+         alpha_grid(i,j) = OPACITY_SCALE * ne_grid(i,j) * sigma_T
+      end do
+   end do
 
-     v_target = 0.0d0
-     v_target(:,NZ) = v_ff_grid(:,NZ)
+   tau_radial_mean   = sum(alpha_grid) / real(NR*NZ,dp) * R_COL
+   tau_vertical_mean = sum(alpha_grid) / real(NR*NZ,dp) * H_COL
 
-     do j = NZ-1, 1, -1
-        do i = 1, NR
-           v_target(i,j) = v_target(i,j+1) - dv_dz_suggested(i,j+1) * dz
-        end do
-     end do
+   write(*,'(A,ES12.4)') "Mean radial optical depth   = ", tau_radial_mean
+   write(*,'(A,ES12.4)') "Mean vertical optical depth = ", tau_vertical_mean
 
-     do i = 1, NR
-        do j = 1, NZ
-           v_target(i,j) = max(v_target(i,j), V_MIN)
-           v_target(i,j) = min(v_target(i,j), v_ff_grid(i,j))
+   call gradient_z(v_grid, dv_dz_grid, dz)
 
-    !========================================================
-    ! Under-relaxation with limited velocity correction
-    !========================================================
-    dv_raw = VELOCITY_RELAX * (v_target(i,j) - v_grid(i,j))
-    ! Limit change to 5 percent per iteration
-    dv_lim = 0.10d0 * v_grid(i,j)
-    if (dv_raw > dv_lim) then
-      dv_raw = dv_lim
-    end if
-    if (dv_raw < -dv_lim) then
-      dv_raw = -dv_lim
-    end if
-    v_new(i,j) = v_grid(i,j) + dv_raw
-        end do
-     end do
+   do i = 1, NR
+      do j = 1, NZ
+         q_grid(i,j) = rho_grid(i,j) * v_grid(i,j) * &
+                       (g_grid(i,j) + v_grid(i,j) * dv_dz_grid(i,j))
+         if (q_grid(i,j) < 0.0d0) q_grid(i,j) = 0.0d0
+         lum_cells(i,j) = q_grid(i,j) * cell_vol(i,j)
+      end do
+   end do
 
-     call smooth_z(v_new)
+   L_volume = sum(lum_cells)
 
-     v_grid = v_new
-     call write_velocity_profile(iteration)
-     scatter_hist = scatter_hist + sum(scatter_thr, dim=2)
-  end do
-  call write_outputs()
-  deallocate(u_thr, Fr_thr, Fz_thr, visit_thr, side_thr, scatter_thr)
+   do i = 1, NR
+      v_base(i) = v_grid(i,1)
+      rho_base(i) = rho_grid(i,1)
+      mdot_ring(i) = rho_base(i) * v_base(i) * ring_area(i)
+      base_lum_rings(i) = 0.5d0 * mdot_ring(i) * v_base(i)**2
+   end do
+
+   L_base = sum(base_lum_rings)
+   L_total = L_volume + L_base
+
+   write(*,'(A,ES12.4)') "L_volume = ", L_volume
+   write(*,'(A,ES12.4)') "L_base   = ", L_base
+   write(*,'(A,ES12.4)') "L_total  = ", L_total
+
+   if (L_total <= 0.0d0) stop "ERROR: total luminosity is non-positive."
+
+   call build_cdf_2d(lum_cells, NR, NZ, cell_cdf)
+   call build_cdf_1d(base_lum_rings, NR, base_ring_cdf)
+
+   p_base = L_base / L_total
+   packet_luminosity = L_total / real(N_PACKETS,dp)
+
+   u_thr = 0.0d0
+   Fr_thr = 0.0d0
+   Fz_thr = 0.0d0
+   visit_thr = 0.0d0
+   side_thr = 0.0d0
+   scatter_thr = 0
+
+   !$omp parallel default(shared) private(k)
+   call mc_parallel_loop()
+   !$omp end parallel
+
+   u_accum = sum(u_thr, dim=3)
+   Fr_accum = sum(Fr_thr, dim=3)
+   Fz_accum = sum(Fz_thr, dim=3)
+
+   do i = 1, NR
+      do j = 1, NZ
+         u_rad(i,j) = u_accum(i,j) / cell_vol(i,j)
+         Fr(i,j)    = Fr_accum(i,j) / cell_vol(i,j)
+         Fz(i,j)    = Fz_accum(i,j) / cell_vol(i,j)
+      end do
+   end do
+   Fr(1,:) = 0.0d0
+
+   ! ========================================================
+   ! Temporal averaging of radiation energy density
+   ! This is the field used for pressure and velocity correction.
+   ! ========================================================
+   if (.not. have_u_rad_avg) then
+      u_rad_avg = u_rad
+      have_u_rad_avg = .true.
+   else
+      u_rad_avg = (1.0d0 - TEMP_AVG_ALPHA) * u_rad_avg &
+                + TEMP_AVG_ALPHA * u_rad
+   end if
+   u_rad_used = u_rad_avg
+
+   do i = 1, NR
+      do j = 1, NZ
+         T_K(i,j)   = max((u_rad_used(i,j)/a_rad)**0.25d0, 1.0d0)
+         T_keV(i,j) = k_B * T_K(i,j) / erg_keV
+         P_gas(i,j) = 2.0d0 * ne_grid(i,j) * k_B * T_K(i,j)
+         P_rad(i,j) = u_rad_used(i,j) / 3.0d0
+      end do
+   end do
+
+   call gradient_z(P_gas, dPgas_dz, dz)
+   call gradient_z(P_rad, dPrad_dz, dz)
+
+   do i = 1, NR
+      do j = 1, NZ
+         dv_dz_suggested(i,j) = - ( g_grid(i,j) + dPgas_dz(i,j)/rho_grid(i,j) &
+                                    + dPrad_dz(i,j)/rho_grid(i,j) ) &
+                                / max(v_grid(i,j), 1.0d-30)
+      end do
+   end do
+
+   ! ========================================================
+   ! Iteration residual:
+   ! current velocity gradient versus target velocity gradient
+   ! ========================================================
+   do i = 1, NR
+      do j = 1, NZ
+         dv_dz_residual(i,j) = &
+              (dv_dz_grid(i,j) - dv_dz_suggested(i,j)) &
+              / max(abs(dv_dz_suggested(i,j)), RES_EPS)
+      end do
+   end do
+   iter_metric = sqrt(sum(dv_dz_residual**2) / real(NR*NZ, dp))
+   write(*,'(A,ES12.4)') "Velocity-gradient residual metric = ", iter_metric
+
+   v_target = 0.0d0
+   v_target(:,NZ) = v_ff_grid(:,NZ)
+
+   do j = NZ-1, 1, -1
+      do i = 1, NR
+         v_target(i,j) = v_target(i,j+1) - dv_dz_suggested(i,j+1) * dz
+      end do
+   end do
+
+   do i = 1, NR
+      do j = 1, NZ
+         v_target(i,j) = max(v_target(i,j), V_MIN)
+         v_target(i,j) = min(v_target(i,j), v_ff_grid(i,j))
+
+         !========================================================
+         ! Under-relaxation with limited velocity correction
+         !========================================================
+         dv_raw = VELOCITY_RELAX * (v_target(i,j) - v_grid(i,j))
+
+         ! Limit change to 10 percent per iteration.
+         dv_lim = 0.10d0 * v_grid(i,j)
+         if (dv_raw > dv_lim) then
+            dv_raw = dv_lim
+         end if
+         if (dv_raw < -dv_lim) then
+            dv_raw = -dv_lim
+         end if
+         v_new(i,j) = v_grid(i,j) + dv_raw
+      end do
+   end do
+
+   call smooth_z(v_new)
+
+   v_grid = v_new
+   call write_velocity_profile(iteration)
+   scatter_hist = scatter_hist + sum(scatter_thr, dim=2)
+end do
+
+call write_outputs()
+deallocate(u_thr, Fr_thr, Fz_thr, visit_thr, side_thr, scatter_thr)
 
 contains
+
   !==================================================================
   !==================================================================
   subroutine write_velocity_profile(iter)
-  integer, intent(in) :: iter
-  integer :: jj, unit
-  character(len=256) :: fname
+    integer, intent(in) :: iter
+    integer :: jj, unit
+    character(len=256) :: fname
+
     write(fname,'("./res/AC_gif/velocity_profile_iter_",I4.4,".dat")') iter
     open(newunit=unit, file=fname, status="replace", action="write")
     write(unit,'(A)') "# z  v_center  v_r_one_third  v_freefall  residual_r_one_third"
@@ -1190,6 +1210,7 @@ contains
   real(dp) function rng_uniform(state)
     integer(int64), intent(inout) :: state
     integer(int64) :: x
+
     x = state
     x = ieor(x, ishft(x, 13))
     x = ieor(x, ishft(x, -7))
@@ -1204,6 +1225,7 @@ contains
     integer(int64), intent(inout) :: state
     real(dp), intent(out) :: dir(3)
     real(dp) :: mu, phi, st
+
     mu = 2.0d0*rng_uniform(state) - 1.0d0
     phi = 2.0d0*pi*rng_uniform(state)
     st = sqrt(max(0.0d0, 1.0d0 - mu*mu))
@@ -1216,6 +1238,7 @@ contains
     integer(int64), intent(inout) :: state
     real(dp), intent(out) :: dir(3)
     real(dp) :: mu, phi, st
+
     mu = rng_uniform(state)
     phi = 2.0d0*pi*rng_uniform(state)
     st = sqrt(max(0.0d0, 1.0d0 - mu*mu))
@@ -1224,12 +1247,29 @@ contains
     dir(3) = mu
   end subroutine upward_direction_rng
 
+  subroutine lambert_upward_direction_rng(state, dir)
+  integer(int64), intent(inout) :: state
+  real(dp), intent(out) :: dir(3)
+  real(dp) :: mu, phi, st
+    ! Lambert law:
+    ! p(mu) = 2 mu, 0 <= mu <= 1
+    ! CDF(mu) = mu^2
+    ! Therefore mu = sqrt(xi).
+    mu = sqrt(rng_uniform(state))
+    phi = 2.0d0*pi*rng_uniform(state)
+    st = sqrt(max(0.0d0, 1.0d0 - mu*mu))
+    dir(1) = st*cos(phi)
+    dir(2) = st*sin(phi)
+    dir(3) = mu
+  end subroutine lambert_upward_direction_rng
+
   subroutine build_cdf_2d(arr, n1, n2, cdf)
     integer, intent(in) :: n1, n2
     real(dp), intent(in) :: arr(n1,n2)
     real(dp), intent(out) :: cdf(n1*n2)
     integer :: ii, jj, kk
     real(dp) :: total
+
     total = sum(arr)
     kk = 0
     do ii = 1, n1
@@ -1251,6 +1291,7 @@ contains
     real(dp), intent(out) :: cdf(n)
     integer :: ii
     real(dp) :: total
+
     total = sum(arr)
     do ii = 1, n
        if (ii == 1) then
@@ -1266,6 +1307,7 @@ contains
     integer, intent(in) :: n
     real(dp), intent(in) :: cdf(n), u
     integer :: lo, hi, mid
+
     lo = 1
     hi = n
     do while (lo < hi)
@@ -1341,6 +1383,7 @@ contains
 
   real(dp) function distance_to_z_boundary(pos, dir)
     real(dp), intent(in) :: pos(3), dir(3)
+
     if (dir(3) > 0.0d0) then
        distance_to_z_boundary = (H_COL - pos(3)) / dir(3)
     else if (dir(3) < 0.0d0) then
@@ -1398,6 +1441,7 @@ contains
     real(dp), intent(inout) :: arr(NR,NZ)
     real(dp) :: tmp(NR,NZ)
     integer :: ii, jj
+
     tmp = arr
     do ii = 1, NR
        do jj = 2, NZ-1
@@ -1406,19 +1450,104 @@ contains
     end do
   end subroutine smooth_z
 
+  !==================================================================
+  ! Relativistic aberration of a photon direction.
+  !
+  ! n_in    : photon direction in the original frame.
+  ! beta_vec: velocity of the new frame relative to the original frame,
+  !           in units of c.
+  ! n_out   : photon direction in the new frame.
+  !
+  ! Formula:
+  ! n'_parallel = (n_parallel - beta) / (1 - beta dot n)
+  ! n'_perp     = n_perp / [gamma * (1 - beta dot n)]
+  !
+  ! Here beta_vec is the boost from the original frame to the new frame.
+  !==================================================================
+  subroutine aberrate_direction(n_in, beta_vec, n_out)
+    real(dp), intent(in) :: n_in(3)
+    real(dp), intent(in) :: beta_vec(3)
+    real(dp), intent(out) :: n_out(3)
+
+    real(dp) :: beta2, beta, gamma
+    real(dp) :: bdotn, denom
+    real(dp) :: npar_scalar
+    real(dp) :: npar(3), nperp(3), bhat(3)
+
+    beta2 = dot_product(beta_vec, beta_vec)
+
+    if (beta2 <= 1.0d-30) then
+       n_out = n_in
+       return
+    end if
+
+    beta2 = min(beta2, 0.999999999999d0)
+    beta = sqrt(beta2)
+    gamma = 1.0d0 / sqrt(1.0d0 - beta2)
+
+    bhat = beta_vec / beta
+    bdotn = dot_product(beta_vec, n_in)
+    denom = 1.0d0 - bdotn
+
+    if (abs(denom) < 1.0d-30) then
+       n_out = n_in
+       return
+    end if
+
+    npar_scalar = dot_product(n_in, bhat)
+    npar = npar_scalar * bhat
+    nperp = n_in - npar
+
+    n_out = nperp / (gamma * denom) + &
+            ((npar_scalar - beta) / denom) * bhat
+
+    n_out = n_out / sqrt(max(dot_product(n_out, n_out), 1.0d-300))
+  end subroutine aberrate_direction
+
+  !==================================================================
+  ! Scattering prescription:
+  ! 1. Transform incoming lab-frame photon direction to the local
+  !    comoving frame of the gas.
+  ! 2. Choose the outgoing direction isotropically in the comoving frame.
+  ! 3. Transform this outgoing direction back to the lab frame.
+  !
+  ! The photon energy/packet luminosity is not changed here. This is the
+  ! minimal correction needed to make scattering isotropic in the local
+  ! zero-velocity frame rather than in the lab frame.
+  !==================================================================
+  subroutine scatter_isotropic_comoving(state, dir_lab, beta_fluid_lab)
+    integer(int64), intent(inout) :: state
+    real(dp), intent(inout) :: dir_lab(3)
+    real(dp), intent(in) :: beta_fluid_lab(3)
+
+    real(dp) :: dir_com(3), dir_new_com(3), dir_new_lab(3)
+
+    ! Lab frame -> fluid comoving frame.
+    call aberrate_direction(dir_lab, beta_fluid_lab, dir_com)
+
+    ! Isotropic Thomson scattering in the comoving frame.
+    call isotropic_direction_rng(state, dir_new_com)
+
+    ! Fluid comoving frame -> lab frame.
+    call aberrate_direction(dir_new_com, -beta_fluid_lab, dir_new_lab)
+
+    dir_lab = dir_new_lab / sqrt(max(dot_product(dir_new_lab, dir_new_lab), 1.0d-300))
+  end subroutine scatter_isotropic_comoving
+
   subroutine mc_parallel_loop()
     integer :: tid, n, ii, jj, jwall
     integer :: scatter_count, step_count
     integer(int64) :: state
     real(dp) :: pos(3), dir(3), mid(3), er(3)
-    real(dp) :: tau_to_scatter, alpha, s_scatter, s_z, s_side, s_escape, s_next
+    real(dp) :: tau_to_scatter, alpha, alpha_lab, s_scatter, s_z, s_side, s_escape, s_next
     real(dp) :: r_mid, r_now, z_now, mu_r, mu_z
+    real(dp) :: beta, gamma, beta_vec(3), bdotn
     logical :: inside
 
     tid = omp_get_thread_num() + 1
     state = seeds(tid)
 
-!$omp do schedule(dynamic)
+    !$omp do schedule(dynamic)
     do n = 1, N_PACKETS
 
        if (rng_uniform(state) < p_base) then
@@ -1446,8 +1575,31 @@ contains
 
           alpha = alpha_grid(ii,jj)
 
-          if (alpha > 0.0d0) then
-             s_scatter = tau_to_scatter / alpha
+          ! ==========================================================
+          ! Relativistic correction to the scattering mean free path.
+          !
+          ! alpha_grid is interpreted as the Thomson scattering
+          ! coefficient in the local comoving frame of the gas.
+          !
+          ! The gas falls downward. Since +z points upward from the
+          ! neutron-star surface, the lab-frame fluid velocity is -z.
+          ! v_grid is treated as a positive speed magnitude.
+          !
+          ! The lab-frame scattering coefficient along photon direction
+          ! n is alpha_lab = alpha_com * gamma * (1 - beta dot n).
+          ! ==========================================================
+          beta = min(v_grid(ii,jj) / c_light, 0.999999d0)
+          gamma = 1.0d0 / sqrt(1.0d0 - beta*beta)
+
+          beta_vec(1) = 0.0d0
+          beta_vec(2) = 0.0d0
+          beta_vec(3) = -beta
+
+          bdotn = dot_product(beta_vec, dir)
+          alpha_lab = alpha * gamma * (1.0d0 - bdotn)
+
+          if (alpha_lab > 0.0d0) then
+             s_scatter = tau_to_scatter / alpha_lab
           else
              s_scatter = huge(1.0d0)
           end if
@@ -1500,15 +1652,11 @@ contains
                 exit
 
              else if (z_now >= H_COL*(1.0d0 - 1.0d-8)) then
-
                 exit
-
              else if (z_now <= 1.0d-10) then
-
-                dir(3) = abs(dir(3))
-                pos(3) = 1.0d-5
-                cycle
-
+               call lambert_upward_direction_rng(state, dir)
+               pos(3) = 1.0d-5
+               cycle
              end if
 
           end if
@@ -1517,7 +1665,15 @@ contains
 
           if (scatter_count > MAX_SCATTERS) exit
 
-          call isotropic_direction_rng(state, dir)
+          ! ==========================================================
+          ! Old version:
+          !   call isotropic_direction_rng(state, dir)
+          !
+          ! New version:
+          !   scattering is isotropic only in the local comoving frame.
+          !   In the lab frame this produces the correct SR anisotropy.
+          ! ==========================================================
+          call scatter_isotropic_comoving(state, dir, beta_vec)
           tau_to_scatter = -log(rng_uniform(state))
 
        end do
@@ -1529,7 +1685,7 @@ contains
        end if
 
     end do
-!$omp end do
+    !$omp end do
 
     seeds(tid) = state
 
@@ -1550,9 +1706,9 @@ contains
 
     open(newunit=unit, file="./res/text_AC", status="replace", action="write")
     do jj = 1, NZ
-      write(unit,'(6ES24.15)') z_cent(jj), v_grid(1,jj), v_grid(i_vprof,jj), &
-                            dv_dz_residual(i_vprof,jj), &
-                            dv_dz_grid(i_vprof,jj) , dv_dz_suggested(i_vprof,jj)
+       write(unit,'(6ES24.15)') z_cent(jj), v_grid(1,jj), v_grid(i_vprof,jj), &
+                              dv_dz_residual(i_vprof,jj), &
+                              dv_dz_grid(i_vprof,jj), dv_dz_suggested(i_vprof,jj)
     end do
     close(unit)
 
@@ -1609,3 +1765,4 @@ contains
   end subroutine write_outputs
 
 end subroutine test_AC
+
