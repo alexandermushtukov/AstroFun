@@ -124,7 +124,7 @@ end module AstroFun_magnetic_accretion
 ! The subroutine calculats the velosity profile in accretion envelope accounting for mass
 ! outflow from accretion disc.
 !   mdot - initial mass accretion rate in units of Eddngton mass accretion rates.
-!   mas(i,1) - length, mas(i,2) - beta, mas(i,3) - tau.
+!   mas(i,1) - lambda, mas(i,2) - beta, mas(i,3) - tau.
 !================================================================================================
 subroutine VelosityProf_2(Lambda,eps_w,mdot,B12,P,m,mas,n,tau_min,t,Rmag8,L39)
 use AstroFun_magnetic_accretion
@@ -148,7 +148,7 @@ real*8::t, tau_min,R6,Rmag8,mdot_Rm
   Rm=Rmag8*1.d8
 
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-  H2Rm=min(0.1d0*L39/m/(Rm/1.d8),0.7d0)
+  H2Rm = min(0.1d0*L39/m/(Rm/1.d8),0.7d0)
   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
   omega_k=sqrt(1.33d26*m/Rm**3)
@@ -160,27 +160,27 @@ real*8::t, tau_min,R6,Rmag8,mdot_Rm
 
   !write(*,*)"# ",beta_0,Rm,omega_k,omega,atan(0.5d0*H2Rm)
 
-  tau_min=1.d10
-  t=0.d0
-  beta=beta_0 !/1.1d0
+  tau_min = 1.d10
+  t = 0.d0
+  beta = beta_0 !/1.1d0
   !dl=0.0001d0
-  l=atan(0.5d0*H2Rm)
+  l = atan(0.5d0*H2Rm)
   !write(*,*)l,H2Rm
   !read(*,*)
-  l_max=acos(sqrt(1.d6/Rm))
-  dl=(l_max-l)/(n-1)
-  r=Rm*cos(l)*cos(l)
-  i=1
+  l_max = acos(sqrt(1.d6/Rm))
+  dl = (l_max-l)/(n-1)
+  r = Rm*cos(l)*cos(l)
+  i = 1
   do while(i.le.n)
     cos_l=cos(l)
     xi=atan(1.d0/tan(l)/2)
     tau=0.12d0*L39**(9.d0/7)/B12**(4.d0/7)/beta/Lambda**(1.5d0)/m**(3.d0/14)/cos_l**3
     !f1=cos(xi)*(1.d0-5.d0*L39/m/tau)  !==with radiation pressure==!
     f1=cos(xi)                         !==without radiation pressure==!
-    f2=2.6d-3*omega**2*Lambda**3/m**(4.d0/7)*B12**(12.d0/7)/L39**(6.d0/7)*cos_l**7*cos(pi+xi-lambda)
+    f2=2.6d-3*omega**2*Lambda**3/m**(4.d0/7)*B12**(12.d0/7)/L39**(6.d0/7)*cos_l**7 * cos(pi+xi-l)
     ff=2.1d-3*m**(6.d0/7)*sqrt(4.d0-3*cos_l**2)*L39**(2.d0/7)/Lambda/B12**(4.d0/7)/cos_l**3
     g1=sin(xi)*(1.d0-5.d0/m/tau)
-    g2=2.6d-3*omega**2*Lambda**3/m**(4.d0/7)*B12**(12.d0/7)/L39**(6.d0/7)*cos_l**7*sin(pi+xi-lambda)
+    g2=2.6d-3*omega**2*Lambda**3/m**(4.d0/7)*B12**(12.d0/7)/L39**(6.d0/7)*cos_l**7 * sin(pi+xi-l)
     gg=1.1d10*tau*m*L39**(4.d0/7)/Lambda**2/m**(2.d0/7)/B12**(8.d0/7)/cos_l**4
     P_tot=gg*(g1+g2)   !==why "-"?
     P_mag=1.63d13/B12**(10.d0/7)*L39**(12.d0/7)/cos_l**12
