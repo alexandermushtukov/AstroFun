@@ -44,147 +44,198 @@ end subroutine test_maxL_CBA
 !  of height H. [H]=[h/R]
 !  This is 2-d code, where the accretion column structure across the field lines is taken into account.
 !  b0 - surface magnetic field strength in units of critical B-field strength
-!  M - neutron star mass measured in solar masses, R - [NS radius}/1[km}
-!  det_S defines the zone, where the accretion disc is interupted: 1 - C-zone, 2 - B-zone, 3 - A-zone
+!  M - neutron star mass measured in solar masses, R - [NS radius]/1[km]
+!  det_S defines the zone, where the accretion disc is interrupted: 1 - C-zone, 2 - B-zone, 3 - A-zone
 !  Output: res=L39, det_T and det_nu check if the temperature is high enough to break the BF and create e-e+ pairs
 !          z2Rm - z/Rm
 !=================================================================================================================
 subroutine maxL(b0,H,M,R,res,det_T,det_nu,z2Rm,det_S)
 implicit none
 real*8,intent(in)::b0,H,M,R
-integer::det_T,det_nu
 integer,intent(in)::det_S
-real*8::res,z2Rm,res1
+real*8,intent(out)::res,z2Rm
+integer,intent(out)::det_T,det_nu
+
+real*8::res1,rel_err
 integer::n,det
-  det=13; n=10
+
+  det=13
+  n=10
   call maxL_n(b0,H,M,R,n,res,det_T,det_nu,z2Rm,det_S)
+
   do while((det.eq.13).and.(n.le.32))
-    n=n*2; call maxL_n(b0,H,M,R,n,res1,det_T,det_nu,z2Rm,det_S)
-    if(abs((res-res1)/res1).le.0.03d0)then
+    n=n*2
+    call maxL_n(b0,H,M,R,n,res1,det_T,det_nu,z2Rm,det_S)
+    if(abs(res1).gt.0.d0)then
+      rel_err=abs((res-res1)/res1)
+    else
+      rel_err=abs(res-res1)
+    end if
+    if(rel_err.le.0.03d0)then
       det=1
     end if
     res=res1
-    write(*,*)n,res
+    write(*,*)n,res,rel_err
   end do
 return
 end subroutine maxL
 
 
 !============================================================================================
+!  Calculates the luminosity L39 corresponding to a given accretion column height H=h/R
+!  for a fixed grid resolution nn and a selected disc-interruption zone det_S.
+!  The routine iterates over L39, updates the column geometry, temperature, opacity,
+!  and integrates the emergent flux over the column height.
 !============================================================================================
 subroutine maxL_n(b0,H,M,R,nn,res,det_T,det_nu,z2Rm,det_S)
 implicit none
 real*8,intent(in)::b0,H,M,R
 integer,intent(in)::nn
-integer::det_T,det_nu,i,j,itt
 integer,intent(in)::det_S !==what zone of the accretion disc which we use==!
-real*8::res,z2Rm,betta,hh,dh,res1,Rm,z,alpha_disc,P_g_rad,Teff
-real*8::masRes,T_new,L39,B12,Lambda,sigma,T_corr,l2d,l2d_A,l2d_C,length,S_d,d,alpha,T_ort,b_h,l
-real*8::columnVel,sigma_average_ross_ort,sigma_average_ross_par,intF1,intF5,I1,I2,find_base   !==function==!
-dimension masRes(2*nn+1),T_new(2*nn+1),T_ort(10,2)
+real*8,intent(out)::res,z2Rm
+integer,intent(out)::det_T,det_nu
+integer::i,j,itt
+real*8::hh,dh,res1,Rm,z,alpha_disc,P_g_rad,Teff
+real*8::masRes,T_new,L39,B12,Lambda,T_corr,l2d,length,S_d,d,alpha,T_ort,b_h
+real*8::vel_top,I1_h,I2_0
+real*8::columnVel,sigma_average_ross_ort,sigma_average_ross_par,I1,I2,find_base   !==functions==!
 real*8::pi
+dimension masRes(2*nn+1),T_new(2*nn+1),T_ort(10,2)
+
   pi=3.14159265359d0
-  alpha=1.d0    !==velocity koefficient: power which describes the velosity evolution with the height==!
-  alpha_disc=0.1d0; Lambda=0.5d0; T_corr=1.d0; length=1.d0 !0.5d0
+
+  alpha=1.d0    !==velocity coefficient: power which describes the velocity evolution with the height==!
+  alpha_disc=0.1d0
+  Lambda=0.5d0
+  T_corr=1.d0
+  length=1.d0 !0.5d0
+
   B12=b0*44.13d0
-  det_nu=0; det_T=0
+
+  det_nu=0
+  det_T=0
 
   T_new(1:2*nn+1)=30.d0
+
   res=0.5d0
   L39=0.1d0
   hh=0.001d0
 
-  itt = 1    !==itterative step==!
+  itt=1    !==iterative step==!
+
   do while((abs((res-L39)/L39).gt.0.02d0).and.(itt.le.25))
-    write(*,*)"#a2",abs((res-L39)/L39),L39,H
+    !write(*,*)"#a2",abs((res-L39)/L39),L39,H
     L39=(res+L39)/2.d0
-    111 Rm = 7.d7*Lambda*(M**(1.d0/7.d0))*(B12**(4.d0/7.d0))*(L39**(-2.d0/7.d0)) !; write(*,*)"*** ",L39,Rm
-    res=0.d0; res1=0.d0
 
-    dh = (H-hh)/(2.d0*nn)  !dh=(H)/(2.d0*nn)
+111 Rm=7.d7*Lambda*(M**(1.d0/7.d0))*(B12**(4.d0/7.d0))*(L39**(-2.d0/7.d0)) !; write(*,*)"*** ",L39,Rm
+    res=0.d0
+    res1=0.d0
+    dh=(H-hh)/(2.d0*nn)  !dh=(H)/(2.d0*nn)
     masRes(1:2*nn+1)=0.d0
-
-    !l2d_A=44.d0*Lambda*(M**(8.d0/7.d0)*(B12**(4.d0/7.d0))*(L39**(-9.d0/7.d0)))*length                           !==accretion from the A-zone==!
-    !l2d_C=37.d0*(Lambda**(-1.d0/8.d0))*(M**(71.d0/140.d0))*(B12**(-1.d0/14.d0))*(L39**(-4.d0/35.d0))*length     !==accretion from the C-zone==!
 
     !==define accretion channel geometry==!
     select case(det_S)
-      case(1); z=Rm*0.056d0*(L39**(3.d0/20.d0))/(m**(21.d0/40.d0))*((Rm/1.d8)**(1.d0/8.d0))*(alpha_disc**(-0.1d0))     !==C-zone==!
-      case(2); z=Rm*0.064d0*(L39**(1.d0/5.d0))/(m**(11.d0/20.d0))*((Rm/1.d8)**(1.d0/20.d0))*(alpha_disc**(-0.1d0))     !==B-zone==!
-      case(3); z=1.d7*L39/m                                                                                            !==A-zone==!
-      case default; z=Rm*0.056d0*(L39**(3.d0/20.d0))/(m**(21.d0/40.d0))*((Rm/1.d8)**(1.d0/8.d0))*(alpha_disc**(-0.1d0))     !==C-zone==!
+      case(1)
+        z=Rm*0.056d0*(L39**(3.d0/20.d0))/(M**(21.d0/40.d0))*((Rm/1.d8)**(1.d0/8.d0))*(alpha_disc**(-0.1d0))     !==C-zone==!
+      case(2)
+        z=Rm*0.064d0*(L39**(1.d0/5.d0))/(M**(11.d0/20.d0))*((Rm/1.d8)**(1.d0/20.d0))*(alpha_disc**(-0.1d0))     !==B-zone==!
+      case(3)
+        z=1.d7*L39/M                                                                                            !==A-zone==!
+      case default
+        z=Rm*0.056d0*(L39**(3.d0/20.d0))/(M**(21.d0/40.d0))*((Rm/1.d8)**(1.d0/8.d0))*(alpha_disc**(-0.1d0))     !==C-zone==!
     end select
+
     z=z/2.d0
 
-    d = 1.d6*abs(asin(sqrt(1.d6/Rm))-asin(sqrt(1.d6/(Rm-2.d0*z))))
+    d=1.d6*abs(asin(sqrt(1.d6/Rm))-asin(sqrt(1.d6/(Rm-2.d0*z))))
     l2d=2.d0*pi*length*1.d6*sqrt(1.d6/(Rm-z))/d
     S_d=2.d0*pi*length*1.d6*sqrt(1.d6/(Rm-z))*d
+
     !d=1.3d4; l=7.7d5; l2d=l/d; S_d=l*d
     !=====================================!
 
     if(((Rm-2.d0*z).le.0.d0).or.(abs(1.d6/(Rm-2.d0*z)).ge.1.d0))then
-      L39=L39/1.1d0; goto 111
+      L39=L39/1.1d0
+      goto 111
     end if
+
+    vel_top=columnVel(H*R,H*R,M,R,alpha)
+
     i=1
+
     do while(i.le.(2*nn+1))
       b_h=b0*((R/(R+R*hh))**3)
-      masRes(i)=I1(hh,H,alpha)
-      masRes(i)=masRes(i)*columnVel(hh*R,H*R,M,R,alpha)/columnVel(H*R,H*R,M,R,alpha)*(((R+hh)/R)**3)/&
-                sigma_average_ross_ort(b_h,T_new(i)*T_corr)!*1.17d0*1.17d0   !==1.17 because of chemical composition==!
+      I1_h=I1(hh,H,alpha)
 
-      !T_new(i)=(6.64d14*L39/S_d/columnVel(H*R,H*R,M,R,alpha)*abs(I1(hh,H,alpha)))**0.25d0
-      T_new(i)=(6.64d14*L39/S_d/columnVel(H*R,H*R,M,R,alpha)*abs(I1(hh,H,alpha))+&
-                9*M/sigma_average_ross_par(b0*((R/(R+R*H))**3),T_new(2*nn+1))/((R+R*H)/10)**2)**0.25d0
-!T_new(i)=(6.64d14*L39/S_d/columnVel(H*R,H*R,M,R,alpha)*abs(I1(hh,H,alpha))+&
-!          9*M/ 1.d0  /((R+R*H)/10)**2)**0.25d0
-      
-      if(T_new(i).le.0.d0)then!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1
+      !==first estimate of masRes; mostly diagnostic/legacy, overwritten below==!
+      masRes(i)=I1_h
+      masRes(i)=masRes(i)*columnVel(hh*R,H*R,M,R,alpha)/vel_top*(((R+hh)/R)**3)/&
+                sigma_average_ross_ort(b_h,T_new(i)*T_corr)!*1.17d0*1.17d0   !==1.17 because of chemical composition==!
+      !T_new(i)=(6.64d14*L39/S_d/vel_top*abs(I1_h))**0.25d0
+      !T_new(i)=(6.64d14*L39/S_d/vel_top*abs(I1_h)+&
+      !          9.d0*M/sigma_average_ross_par(b0*((R/(R+R*H))**3),T_new(2*nn+1))/((R+R*H)/10.d0)**2)**0.25d0
+      T_new(i)=(6.64d14*L39/S_d/vel_top*abs(I1_h)+&
+                9.d0*M/1.d0/((R+R*H)/10.d0)**2)**0.25d0
+
+      if(T_new(i).le.0.d0)then
         T_new(i)=1.d-4
       end if
 
-
       j=1
       do while(j.le.10)
-        T_ort(j,1)=(j-1)*1.d0/9.d0; j=j+1
+        T_ort(j,1)=(j-1)*1.d0/9.d0
+        j=j+1
       end do
+
       T_ort(1:10,2)=T_new(i)
 
-      j=2; goto 333
+      !==calculations of the accretion column structure across the magnetic field are switched off==!
+      j=2
+      goto 333
+
       !==calculations of the accretion column structure across the magnetic field==!
       do while(j.le.10)
-        T_ort(j,2)=(6.64d14*L39/S_d/columnVel(H*R,H*R,M,R,alpha)*abs(I1(hh,H,alpha))*&
+        T_ort(j,2)=(6.64d14*L39/S_d/vel_top*abs(I1_h)*&
                     I2(b_h,(j-1)*1.d0/9.d0,T_ort,10)/I2(b_h,0.d0,T_ort,10))**0.25d0
         !write(*,*)j,T_ort(1,2),T_ort(j,2)
         j=j+1
       end do
-      333 j=j
- 
-      masRes(i)=I1(hh,H,alpha)/I2(b_h,0.d0,T_ort,10)
-      masRes(i)=masRes(i)*columnVel(hh*R,H*R,M,R,alpha)/columnVel(H*R,H*R,M,R,alpha)*(((R+hh)/R)**3)
+
+333   j=j
+
+      I2_0=I2(b_h,0.d0,T_ort,10)
+
+      masRes(i)=I1_h/I2_0
+      masRes(i)=masRes(i)*columnVel(hh*R,H*R,M,R,alpha)/vel_top*(((R+hh)/R)**3)
 
       !===temperature checking=====================
       if(T_new(i).gt.(1300.d0*sqrt(b_h)))then
-         !masRes(i)=0.d0
-         if(T_new(i).ge.1.d3)then
-           det_nu=2
-         end if
+        !masRes(i)=0.d0
+        if(T_new(i).ge.1.d3)then
+          det_nu=2
+        end if
       else
-         if(T_new(i).ge.1.d3)then
-           det_nu=1
-         end if
+        if(T_new(i).ge.1.d3)then
+          det_nu=1
+        end if
       end if
+
       P_g_rad=3.d20*(L39**0.6d0)*(B12**(-0.5d0))/columnVel(hh*R,H*R,M,R,alpha)*1.5d-9*T_new(i)&
               +5.2d13/3.d0*T_new(i)**4
+
       if(P_g_rad/b_h/b_h/1.d24*4.d0*pi.ge.1.d0)then
         det_T=1
       end if
       !============================================
 
-      res1=res1+dh*4.d0*m*(l2d/50.d0)*masRes(i)
-      Teff=((1.d39/25.d0*m/1.d6/d*masRes(i)/5.67d-5)**(0.25d0))/11604.d0/1.d3/1.22d0;
+      res1=res1+dh*4.d0*M*(l2d/50.d0)*masRes(i)
+
+      Teff=((1.d39/25.d0*M/1.d6/d*masRes(i)/5.67d-5)**(0.25d0))/11604.d0/1.d3/1.22d0
+
       !!write(*,*)masRes(i),columnVel(hh*R,H*R,M,R,alpha)
       !write(*,*)i,b0,H,hh,T_new(i)!,sigma_average_ross_ort(b_h,T_new(i)*T_corr),Teff,columnVel(hh*R,H*R,M,R,alpha)!, det_T !P_g_rad/b_h/1.d24*4.d0*pi !det_T!  ,l2d        !,det_S
-      i=i+1; hh=hh+dh
+      i=i+1
+      hh=hh+dh
     end do
 
     i=1
@@ -194,28 +245,36 @@ real*8::pi
     end do
 
     z2Rm=z/Rm
-    res=res*8.d0*m*(l2d/50.d0)
-    !write(*,*)"# L39= ",res,z/Rm,Rm,det_T,det_nu !,L39
+    res=res*8.d0*M*(l2d/50.d0)
+
     itt=itt+1
-    hh=find_base(B12,T_new(i),alpha,M,R,H,L39,S_d)!; write(*,*)"hh=",hh
+    !==after the loop i=2*nn+2, therefore T_new(i) would be out of bounds==!
+    hh=find_base(B12,T_new(2*nn+1),alpha,M,R,H,L39,S_d) !; write(*,*)"hh=",hh
   end do
 return
 end subroutine maxL_n
 
 
-
 !============================================================================================
+!  Finds the base height h/R where the gas+radiation pressure becomes comparable
+!  to the magnetic pressure. The root is found by bisection in the interval [1d-17, 0.1].
 !============================================================================================
 real*8 function find_base(B12,T,alpha,M,R,H,L39,S_d)
 implicit none
 real*8,intent(in)::B12,T,alpha,M,R,H,L39,S_d
-real*8::P_g_rad,hh1,hh2,hh
+real*8::P_g_rad
+real*8::hh1,hh2,hh
+real*8::vel
 real*8::columnVel  !==function==!
-  hh1=1.d-17; hh2=0.1d0;
+
+  hh1=1.d-17
+  hh2=0.1d0
   do while(abs(hh1-hh2)/hh2.gt.0.05d0)
     hh=(hh1+hh2)/2.d0
-    P_g_rad=7.5d31*L39/S_d/m/columnVel(hh*R,H*R,M,R,alpha)*1.6d-9*T/0.6d0&
-            +5.2d13/3.d0*T**4;! write(*,*)hh1,hh2,P_g_rad !/B12/B12/1.d24*4.d0*3.141592d0
+    vel=columnVel(hh*R,H*R,M,R,alpha)
+    P_g_rad=7.5d31*L39/S_d/M/vel*1.6d-9*T/0.6d0&
+            +5.2d13/3.d0*T**4
+    !write(*,*)hh1,hh2,P_g_rad !/B12/B12/1.d24*4.d0*3.141592d0
     if(P_g_rad/B12/B12/1.d24*4.d0*3.1416d0.ge.1.d0)then
       hh1=hh
     else
@@ -223,113 +282,169 @@ real*8::columnVel  !==function==!
     end if
   end do
   find_base=hh
+
 return
 end function find_base
 !============================================================================================
 
 
 !===============================================================================================
+!  Diagnostic routine: estimates ram and radiation pressure terms in the accretion channel
+!  as a function of magnetic latitude lambda, for given surface field b0 and luminosity L39.
+!  Prints: lambda, beta, density, ram pressure, radiation term, rad/ram ratio, local Ecyc.
 !===============================================================================================
 subroutine channel_pressure(lambda,b0,L39)
 implicit none
+
 real*8,intent(in)::b0,L39,lambda
-real*8::Rm,S_d,B12,pi,zA,zB,zC,z,d,l,length,alpha_disc,M,chan_press
+
+real*8::Rm,S_d,B12,pi
+real*8::zA,zB,zC,z,d,length,alpha_disc,M
 real*8::ro,M19,ram,rad,beta,b
+real*8::cos_lam,cos2_lam,geom_fac,rad_proj,chan_press
 
-  pi = 3.14159265359d0; M=1.4d0
-  alpha_disc = 0.1d0; length=0.5d0 !0.5d0
-  B12 = b0*44.13d0
-  M19 = 0.75d0*L39/M
-  Rm = 7.d7*0.5d0*(M**(1.d0/7.d0))*(B12**(4.d0/7.d0))*(L39**(-2.d0/7.d0))
-  b = b0*((1.d6/Rm)**3)/((cos(lambda))**6)*sqrt((4.d0-3.d0*cos(lambda)*cos(lambda))/(4.d0-3.d0*(1.d6/Rm)))
+  pi=3.14159265359d0
 
-  zC = Rm*0.056d0*(L39**(3.d0/20.d0))/(m**(21.d0/40.d0))*((Rm/1.d8)**(1.d0/8.d0))*(alpha_disc**(-0.1d0))     !==C-zone==!
-  zB = Rm*0.064d0*(L39**(1.d0/5.d0))/(m**(11.d0/20.d0))*((Rm/1.d8)**(1.d0/20.d0))*(alpha_disc**(-0.1d0))     !==B-zone==!
-  zA = 1.d7*L39/m                                                                                            !==A-zone==!
+  M=1.4d0
+  alpha_disc=0.1d0
+  length=0.5d0
 
-  z = max(zA,zB,zC)
-  
-  d = 1.d6*abs(asin(sqrt(1.d6/Rm))-asin(sqrt(1.d6/(Rm-1.d0*z))))
-  S_d = 2.d0*pi*length*1.d6*sqrt(1.d6/(Rm-z))*d
+  B12=b0*44.13d0
+  M19=0.75d0*L39/M
+  cos_lam=cos(lambda)
+  cos2_lam=cos_lam*cos_lam
 
-  beta=sqrt(3.d5*M/(Rm*cos(lambda)*cos(lambda)))
-  ro=1.d19*M19/2/S_d*((1.d6/Rm)**3)/((cos(lambda))**5)*sqrt((4.d0-3.d0*cos(lambda)*cos(lambda))/(4.d0-3.d0*(1.d6/Rm)))&
+  Rm=7.d7*0.5d0*(M**(1.d0/7.d0))*(B12**(4.d0/7.d0))*(L39**(-2.d0/7.d0))
+  geom_fac=sqrt((4.d0-3.d0*cos2_lam)/(4.d0-3.d0*(1.d6/Rm)))
+  b=b0*((1.d6/Rm)**3)/(cos_lam**6)*geom_fac
+  zC=Rm*0.056d0*(L39**(3.d0/20.d0))/(M**(21.d0/40.d0))*((Rm/1.d8)**(1.d0/8.d0))*(alpha_disc**(-0.1d0))     !==C-zone==!
+  zB=Rm*0.064d0*(L39**(1.d0/5.d0))/(M**(11.d0/20.d0))*((Rm/1.d8)**(1.d0/20.d0))*(alpha_disc**(-0.1d0))     !==B-zone==!
+  zA=1.d7*L39/M                                                                                         !==A-zone==!
+  z=max(zA,zB,zC)
+  d=1.d6*abs(asin(sqrt(1.d6/Rm))-asin(sqrt(1.d6/(Rm-z))))
+  S_d=2.d0*pi*length*1.d6*sqrt(1.d6/(Rm-z))*d
+
+  beta=sqrt(3.d5*M/(Rm*cos2_lam))
+
+  ro=1.d19*M19/2.d0/S_d*((1.d6/Rm)**3)/(cos_lam**5)*geom_fac&
      /beta/3.d10
+
   ram=ro*(beta**2)*9.d20
-  
-  rad=(1.d39*L39-2.d38)/((Rm*cos(lambda)*cos(lambda))**2)/3.d10/4.d0/pi
 
-  chan_press=(ram-rad*cos(atan(1.d0/2.d0/tan(lambda))))
+  rad=(1.d39*L39-2.d38)/((Rm*cos2_lam)**2)/3.d10/4.d0/pi
 
-  write(*,*)lambda,beta,ro,ram,rad,(rad*cos(atan(1.d0/2.d0/tan(lambda))))/ram,b*44.13*11.6
+  rad_proj=rad*cos(atan(1.d0/2.d0/tan(lambda)))
+
+  chan_press=ram-rad_proj
+
+  !write(*,*)lambda,beta,ro,ram,rad,rad_proj/ram,b*44.13d0*11.6d0
 return
 end subroutine channel_pressure
+!===============================================================================================
 
 
+!=======================================================================================
+!  Finds the maximum value of chan_pressure(lambda,b0,L39)
+!  over lambda in the interval [0,1.54] with step 0.01.
 !=======================================================================================
 real*8 function chan_pres_max(b0,L39)
 implicit none
 real*8,intent(in)::b0,L39
 real*8::chan_pressure  !==function==!
 real*8::lambda,res
-  lambda=0.d0
-  chan_pres_max=-100.d0
-  do while(lambda.le.1.54d0)
+real*8::lambda_min,lambda_max,dlambda
+  lambda_min=0.d0
+  lambda_max=1.54d0
+  dlambda=0.01d0
+  chan_pres_max=-1.d100
+  lambda=lambda_min
+  do while(lambda.le.lambda_max)
     res=chan_pressure(lambda,b0,L39)
     if(res.gt.chan_pres_max)then
       chan_pres_max=res
     end if
-    lambda=lambda+0.01d0
+    lambda=lambda+dlambda
   end do
 return
 end function chan_pres_max
+!=======================================================================================
 
 
+!=======================================================================================
+!  Returns the ratio of the projected radiation term to the ram pressure
+!  in the accretion channel at magnetic latitude lambda.
+!=======================================================================================
 real*8 function chan_pressure(lambda,b0,L39)
 implicit none
 real*8,intent(in)::b0,L39,lambda
-real*8::Rm,S_d,B12,pi,zA,zB,zC,z,d,l,length,alpha_disc,M,chan_press
+real*8::Rm,S_d,B12,pi
+real*8::zA,zB,zC,z,d,length,alpha_disc,M
 real*8::ro,M19,ram,rad,beta,b
-  pi=3.14159265359d0; M=1.4d0
-  alpha_disc=0.1d0; length=0.5d0 !0.5d0
+real*8::cos_lam,cos2_lam,tan_lam,geom_fac,proj_fac
+
+  pi=3.14159265359d0
+
+  M=1.4d0
+  alpha_disc=0.1d0
+  length=0.5d0
+
   B12=b0*44.13d0
   M19=0.75d0*L39/M
-  Rm=7.d7*0.5d0*(M**(1.d0/7.d0))*(B12**(4.d0/7.d0))*(L39**(-2.d0/7.d0)) !; write(*,*)"*** ",L39,Rm
-  b=b0*((1.d6/Rm)**3)/((cos(lambda))**6)*sqrt((4.d0-3.d0*cos(lambda)*cos(lambda))/(4.d0-3.d0*(1.d6/Rm)))
 
-  zC=Rm*0.056d0*(L39**(3.d0/20.d0))/(m**(21.d0/40.d0))*((Rm/1.d8)**(1.d0/8.d0))*(alpha_disc**(-0.1d0))     !==C-zone==!
-  zB=Rm*0.064d0*(L39**(1.d0/5.d0))/(m**(11.d0/20.d0))*((Rm/1.d8)**(1.d0/20.d0))*(alpha_disc**(-0.1d0))   !==B-zone==!
-  zA=1.d7*L39/m   !==A-zone==!
+  cos_lam=cos(lambda)
+  cos2_lam=cos_lam*cos_lam
+  tan_lam=tan(lambda)
+
+  Rm=7.d7*0.5d0*(M**(1.d0/7.d0))*(B12**(4.d0/7.d0))*(L39**(-2.d0/7.d0)) !; write(*,*)"*** ",L39,Rm
+
+  geom_fac=sqrt((4.d0-3.d0*cos2_lam)/(4.d0-3.d0*(1.d6/Rm)))
+
+  b=b0*((1.d6/Rm)**3)/(cos_lam**6)*geom_fac
+
+  zC=Rm*0.056d0*(L39**(3.d0/20.d0))/(M**(21.d0/40.d0))*((Rm/1.d8)**(1.d0/8.d0))*(alpha_disc**(-0.1d0))   !==C-zone==!
+  zB=Rm*0.064d0*(L39**(1.d0/5.d0))/(M**(11.d0/20.d0))*((Rm/1.d8)**(1.d0/20.d0))*(alpha_disc**(-0.1d0))   !==B-zone==!
+  zA=1.d7*L39/M                                                                                       !==A-zone==!
 
   z=max(zA,zB,zC)
-  
-  d=1.d6*abs(asin(sqrt(1.d6/Rm))-asin(sqrt(1.d6/(Rm-1.d0*z))))
+
+  d=1.d6*abs(asin(sqrt(1.d6/Rm))-asin(sqrt(1.d6/(Rm-z))))
   S_d=2.d0*pi*length*1.d6*sqrt(1.d6/(Rm-z))*d
 
-  beta=sqrt(3.d5*M/(Rm*cos(lambda)*cos(lambda)))
-  ro=1.d19*M19/2.d0/S_d*((1.d6/Rm)**3)/((cos(lambda))**5)*sqrt((4.d0-3.d0*cos(lambda)*cos(lambda))/(4.d0-3.d0*(1.d6/Rm)))&
-     /beta/3.d10
-  ram=ro*(beta**2)*9.d20
-  
-  rad=(1.d39*L39-2.d38)/((Rm*cos(lambda)*cos(lambda))**2)/3.d10/4.d0/pi
+  beta=sqrt(3.d5*M/(Rm*cos2_lam))
 
-  chan_pressure=(rad*cos(atan(1.d0/2.d0/tan(lambda))))/ram !(ram-rad*cos(atan(1.d0/2.d0/tan(lambda))))
+  ro=1.d19*M19/2.d0/S_d*((1.d6/Rm)**3)/(cos_lam**5)*geom_fac&
+     /beta/3.d10
+
+  ram=ro*(beta**2)*9.d20
+
+  rad=(1.d39*L39-2.d38)/((Rm*cos2_lam)**2)/3.d10/4.d0/pi
+
+  proj_fac=2.d0*tan_lam/sqrt(1.d0+4.d0*tan_lam*tan_lam)
+
+  chan_pressure=rad*proj_fac/ram
+
 return
 end function chan_pressure
+!=======================================================================================
 
 
-!=================================================================================================================================
-! Functions for calculations of the accretion column structure.
-!=================================================================================================================================
+
+
+
+!=============================================================================================
+!  Auxiliary analytical integrals and numerical transverse integral used
+!  in the accretion-column structure calculations.
+!=============================================================================================
 real*8 function intF1(x)
 implicit none
 real*8,intent(in)::x
-  intF1=log(x/(x+1))+(12.d0*x**3+42.d0*x**2+52.d0*x+25.d0)/12.d0/(x+1.d0)**4
-  !intF1=log((sqrt(1.d0+x)-1.d0)/(sqrt(1.d0+x)+1.d0))+2.d0*(105.d0*(x+1)**3+35.d0*(x+1.d0)**2+21.d0*(x+1.d0)+15.d0)/&
+  intF1=log(x/(x+1.d0))+(12.d0*x**3+42.d0*x**2+52.d0*x+25.d0)/12.d0/(x+1.d0)**4
+  !intF1=log((sqrt(1.d0+x)-1.d0)/(sqrt(1.d0+x)+1.d0))+2.d0*(105.d0*(x+1.d0)**3+35.d0*(x+1.d0)**2+21.d0*(x+1.d0)+15.d0)/&
   !                                                   105.d0/((x+1.d0)**3.5d0)       !==Valery correction==!
 return
 end function intF1
 !=================
+
 
 real*8 function intF2(x)
 implicit none
@@ -363,15 +478,22 @@ end function intF5
 real*8 function I1(h,H0,alpha)
 implicit none
 real*8,intent(in)::h,H0,alpha
-real*8::intF1,intF2,intF5  !==functions==!
+real*8::intF1,intF2,intF3,intF5  !==functions==!
 integer::a
-  a=alpha
+  a=int(alpha)
   select case(a)
-    case(1); I1=H0*(intF1(H0)-intF1(h))
-    case(2); I1=(H0**2)*(intF2(H0)-intF2(h))
-    case(3); I1=(H0**3)*(intF2(H0)-intF2(h))
-    case(5); I1=(H0**5)*(intF5(H0)-intF5(h))
-    case default; I1=H0*(intF1(H0)-intF1(h))
+    case(1)
+      I1=H0*(intF1(H0)-intF1(h))
+    case(2)
+      I1=(H0**2)*(intF2(H0)-intF2(h))
+    case(3)
+      !==old code used intF2 here; check whether intF3 was intended==!
+      I1=(H0**3)*(intF2(H0)-intF2(h))
+      !I1=(H0**3)*(intF3(H0)-intF3(h))
+    case(5)
+      I1=(H0**5)*(intF5(H0)-intF5(h))
+    case default
+      I1=H0*(intF1(H0)-intF1(h))
   end select
 return
 end function I1
@@ -379,34 +501,33 @@ end function I1
 
 real*8 function I2(b,x,T,n)
 implicit none
-real*8,intent(in)::b,x,T
+real*8,intent(in)::b,x
 integer,intent(in)::n
-dimension T(n,2)
+real*8,intent(in)::T(n,2)
 real*8::sigma_average_ross_ort,find_H  !==functions==!
-real*8::y,dy,res,T_
+real*8::y,dy,T_
 integer::nn,i
-real*8::masI2
-dimension masI2(13)
-  nn=12; dy=(1.d0-x)/nn
+real*8::masI2(13)
+
+  nn=12
   if(x.ge.1.d0)then
     I2=0.d0
   else
-    y=x; I2=0.d0; i=1
-    do while(y.le.1.d0)
-      T_=find_H(y,T,n);! write(*,*)!"t ",T_
+    dy=(1.d0-x)/nn
+    do i=1,nn+1
+      y=x+(i-1)*dy
+      T_=find_H(y,T,n)
+      !write(*,*)!"t ",T_
       masI2(i)=sigma_average_ross_ort(b,T_)*y
-      y=y+dy; i=i+1
     end do
-    i=1
-    do while(i.le.11)
+    I2=0.d0
+    do i=1,nn-1,2
       I2=I2+2.d0*dy*(masI2(i)+4.d0*masI2(i+1)+masI2(i+2))/6.d0
-      i=i+2
     end do
   end if
 return
 end function I2
 !=====================================================================================
-
 
 !=============================================================================
 ! The function gives velosity profile in the accretion column
@@ -434,9 +555,10 @@ end function columnVel
 
 
 !===================================================================================
-!The function finds rosseland average cross section.
-!The main parameters: length  - length fraction of the accretion arc on the surface
-!and polarization mixture.
+!  Rosseland mean cross-section for photons propagating along the magnetic field.
+!  b - magnetic field strength in units of critical B-field strength
+!  T - temperature [keV]
+!  Output is in units of the Thomson cross-section.
 !===================================================================================
 real*8 function sigma_average_ross_par(b,T)
 use mod_sig_ave
@@ -445,56 +567,53 @@ interface
   real*8 function f_sig_ave_ross(x)
     real*8,intent(in)::x
   end function f_sig_ave_ross
+
   real*8 function f_pl_ave(x)
     real*8,intent(in)::x
   end function f_pl_ave
 end interface
+
 real*8,intent(in)::b,T
-integer::n,i,j,l_pol_1,l_pol_2
-real*8::pi,dthetta,thetta,sigma_ave,sigma_ave_1,sigma_ave_2,lim1,lim2,eps
-real*8::mas
-dimension mas(300,2)
-real*8::int_simpson_new,find_H  !==functions==!
+integer::l_pol_1,l_pol_2
+real*8::sigma_ave_1,sigma_ave_2,lim1,lim2,eps
+real*8::int_simpson_new  !==function==!
   eps=0.03d0
-  pi=3.141592654d0
-  l_pol_1=1; l_pol_2=1                     !=====================================!
+  !==polarization states; currently pure X-mode if l_pol_1=l_pol_2=1==!
+  l_pol_1=1
+  l_pol_2=1
 
-  bb=b; TT=T   !==we use these variables in module
+  !==we use these variables in module mod_sig_ave==!
+  bb=b
+  TT=T
+  lim1=TT/511.d0/100.d0
+  lim2=TT/511.d0*40.d0
 
-  n=10
-  dthetta=pi/2/n; thetta=dthetta/2.d0
-  i=1
-  do while(i.le.n)
-    !write(*,*)i
-    !call find_sigma_db(mas,300,1,b,thetta,T); sig1(i,1:300,1:2)=mas(1:300,1:2)
-    !call find_sigma_db(mas,300,2,b,thetta,T); sig2(i,1:300,1:2)=mas(1:300,1:2)
-    i=i+1; thetta=thetta+dthetta
-  end do
-  !!==now we have a massive with data about all thetta-angles==!
-  lim1=TT/511.d0/100.d0; lim2=TT/511.d0*40.d0
   if(l_pol_1.eq.l_pol_2)then
-    l_pol=l_pol_1; sigma_ave_1=1.d0/int_simpson_new(f_sig_ave_ross,lim1,lim2,eps)*&
-                                    int_simpson_new(f_pl_ave,lim1,lim2,eps)
+    l_pol=l_pol_1
+    sigma_ave_1=1.d0/int_simpson_new(f_sig_ave_ross,lim1,lim2,eps)*&
+                int_simpson_new(f_pl_ave,lim1,lim2,eps)
     sigma_ave_2=sigma_ave_1
   else
-    l_pol=l_pol_1; sigma_ave_1=1.d0/int_simpson_new(f_sig_ave_ross,lim1,lim2,eps)*&
-                                    int_simpson_new(f_pl_ave,lim1,lim2,eps)
-    l_pol=l_pol_2; sigma_ave_2=1.d0/int_simpson_new(f_sig_ave_ross,lim1,lim2,eps)*&
-                                            int_simpson_new(f_pl_ave,lim1,lim2,eps)
+    l_pol=l_pol_1
+    sigma_ave_1=1.d0/int_simpson_new(f_sig_ave_ross,lim1,lim2,eps)*&
+                int_simpson_new(f_pl_ave,lim1,lim2,eps)
+    l_pol=l_pol_2
+    sigma_ave_2=1.d0/int_simpson_new(f_sig_ave_ross,lim1,lim2,eps)*&
+                int_simpson_new(f_pl_ave,lim1,lim2,eps)
   end if
-  sigma_ave=1.d0/(0.5d0/sigma_ave_1+0.5d0/sigma_ave_2)
-  sigma_average_ross_par=sigma_ave
+
+  sigma_average_ross_par=1.d0/(0.5d0/sigma_ave_1+0.5d0/sigma_ave_2)
   !write(*,*)sigma_average_ross_par
 return
 end function sigma_average_ross_par
-
+!================================================================================
 
 
 !================================================================================
-!The subroutine gives Rosseland mean cross-section for the case of photons moving
-!across the magnetic field.
-!b - magnetic field strength (in units of critical B-field strength)
-!T - temperature [keV]
+!  Rosseland mean cross-section for photons propagating across the magnetic field.
+!  b - magnetic field strength in units of critical B-field strength
+!  T - temperature [keV]
+!  Output is in units of the Thomson cross-section.
 !===============================================================================
 real*8 function sigma_average_ross_ort(b,T)
 use mod_sig_ave
@@ -503,67 +622,66 @@ interface
   real*8 function f_sig_ave_ross_ort(x)
     real*8,intent(in)::x
   end function f_sig_ave_ross_ort
+
   real*8 function f_pl_ave(x)
     real*8,intent(in)::x
   end function f_pl_ave
 end interface
+
 real*8,intent(in)::b,T
-integer::n,i,j,l_pol_1,l_pol_2
-real*8::pi,dthetta,thetta,sigma_ave,sigma_ave_1,sigma_ave_2,sigma_ave_d,lim1,lim2,eps
-real*8::mas
-dimension mas(300,2)
-real*8::int_simpson_new,find_H  !==functions==!
-  eps = 0.03d0
-  pi = 3.141592654d0
+integer::l_pol_1,l_pol_2
+real*8::sigma_ave_1,sigma_ave_2,lim1,lim2,eps
+real*8::int_simpson_new  !==function==!
 
-  l_pol_1 = 1; l_pol_2 = 1                     !=====================================!
-  bb=b; TT=T   !==we use these variables in module
+  eps=0.03d0
 
-  n = 10
-  dthetta = pi/2/n; thetta=dthetta/2
-  i=1
-  do while(i.le.n)
-    !write(*,*)i
-    !call find_sigma_db(mas,300,1,b,thetta,T); sig1(i,1:300,1:2)=mas(1:300,1:2)
-    !call find_sigma_db(mas,300,2,b,thetta,T); sig2(i,1:300,1:2)=mas(1:300,1:2)
-    i=i+1; thetta=thetta+dthetta
-  end do
-  !==now we have an array with data about all thetta-angles==!
+  !==polarization states; currently pure X-mode if l_pol_1=l_pol_2=1==!
+  l_pol_1=1
+  l_pol_2=1
 
-  lim1=TT/511.d0/100.d0; lim2=TT/511.d0*40.d0
+  !==we use these variables in module mod_sig_ave==!
+  bb=b
+  TT=T
+  lim1=TT/511.d0/100.d0
+  lim2=TT/511.d0*40.d0
 
   if(l_pol_1.eq.l_pol_2)then
-    l_pol=l_pol_1; sigma_ave_1=1.d0/int_simpson_new(f_sig_ave_ross_ort,lim1,lim2,eps)*&
-                                    int_simpson_new(f_pl_ave,lim1,lim2,eps)
+    l_pol=l_pol_1
+    sigma_ave_1=1.d0/int_simpson_new(f_sig_ave_ross_ort,lim1,lim2,eps)*&
+                int_simpson_new(f_pl_ave,lim1,lim2,eps)
     sigma_ave_2=sigma_ave_1
   else
-    l_pol=l_pol_1; sigma_ave_1=1.d0/int_simpson_new(f_sig_ave_ross_ort,lim1,lim2,eps)*&
-                                  int_simpson_new(f_pl_ave,lim1,lim2,eps)
-    l_pol=l_pol_2; sigma_ave_2=1.d0/int_simpson_new(f_sig_ave_ross_ort,lim1,lim2,eps)*&
-                                            int_simpson_new(f_pl_ave,lim1,lim2,eps)
+    l_pol=l_pol_1
+    sigma_ave_1=1.d0/int_simpson_new(f_sig_ave_ross_ort,lim1,lim2,eps)*&
+                int_simpson_new(f_pl_ave,lim1,lim2,eps)
+    l_pol=l_pol_2
+    sigma_ave_2=1.d0/int_simpson_new(f_sig_ave_ross_ort,lim1,lim2,eps)*&
+                int_simpson_new(f_pl_ave,lim1,lim2,eps)
+
   end if
-  sigma_ave=1.d0/(0.5d0/sigma_ave_1+0.5d0/sigma_ave_2)
-  sigma_average_ross_ort=sigma_ave
+  sigma_average_ross_ort=1.d0/(0.5d0/sigma_ave_1+0.5d0/sigma_ave_2)
 return
 end function sigma_average_ross_ort
-
+!================================================================================
 
 
 !================================================================================================================
-!Averaging for Rosseland case: sigma_average_ross
-! x - photon energy; TT (temperature), bb (field strength), l_pol (polarization state) are in the attached module
+!  Rosseland integrand for photons propagating across the magnetic field.
+!  x - photon energy in units of electron rest energy
+!  TT, bb, l_pol and the cross-section tables are taken from mod_sig_ave.
 !================================================================================================================
 real*8 function f_sig_ave_ross_ort(x)
 use mod_sig_ave
 implicit none
 real*8,intent(in)::x
 real*8::pi
-real*8::plank_qft_norn,sig_ang_ave_ross_ort,dplank_dT  !==functions==!
+real*8::sig_ang_ave_ross_ort,dplank_dT  !==functions==!
   pi=3.1415926535d0
-  f_sig_ave_ross_ort=6.d0/pi*dplank_dT(x*511.d3*1.602d-12,TT*1.d3*11600.d0)/sig_ang_ave_ross_ort(x,bb,sig1,sig2,10,l_pol)
+  f_sig_ave_ross_ort=6.d0/pi*dplank_dT(x*511.d3*1.602d-12,TT*1.d3*11600.d0)&
+                     /sig_ang_ave_ross_ort(x,bb,sig1,sig2,10,l_pol)
 return
 end function f_sig_ave_ross_ort
-
+!================================================================================================================
 
 
 !==angle-average-Rosseland CS=================================================
