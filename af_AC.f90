@@ -75,7 +75,7 @@ integer::n,det
       det=1
     end if
     res=res1
-    write(*,*)n,res,rel_err
+    !write(*,*)n,res,rel_err
   end do
 return
 end subroutine maxL
@@ -748,81 +748,98 @@ end function sig_ang_ave_ross_ort
 
 
 !=======================================================================
-! [E]=[erg], [T]=[K], [plank]=[B_{\nu}]=[erg/(ster*cm^{2}*sec*(1/sec))]
+!  Derivative of the Planck function with respect to temperature.
+!  [E]=[erg], [T]=[K]
+!  [dplank_dT]=dB_nu/dT in cgs units
 !=======================================================================
 real*8 function dplank_dT(E,T)
 implicit none
 real*8,intent(in)::E,T
 real*8::c,h,k
-c=2.99792d10
-h=6.62606896d-27
-k=1.3807d-16
-if(E.gt.(100.d0*k*T))then
-   dplank_dT=2.d0*(E**3)/((h**2)*(c**2))*exp(-E/(k*T))*E/k/(T**2)
+real*8::u,exp_u
+  c=2.99792d10
+  h=6.62606896d-27
+  k=1.3807d-16
+  u=E/(k*T)
+  if(u.gt.100.d0)then
+    dplank_dT=2.d0*(E**3)/((h**2)*(c**2))*exp(-u)*E/k/(T**2)
+  else if(u.lt.0.01d0)then
+    dplank_dT=2.d0*k*(E**2)/((h**2)*(c**2))
   else
-   if((100.d0*E).le.(k*T))then
-      dplank_dT=2.d0*k*(E**2)/((h**2)*(c**2))
-   else
-      dplank_dT=2.d0*(E**3)/((h**2)*(c**2)*(exp(E/(k*T))-1.d0))*E*exp(E/(k*T))/k/(T**2)/(exp(E/k/T)-1.d0)
-   end if
-end if
-!write(*,*)"pl:",plank,E,T
+    exp_u=exp(u)
+    dplank_dT=2.d0*(E**3)/((h**2)*(c**2))&
+              *E*exp_u/k/(T**2)/(exp_u-1.d0)**2
+  end if
 return
 end function dplank_dT
+!=======================================================================
 
+
+!=======================================================================
+!  Planck weight for Rosseland averaging.
+!  x - photon energy in units of electron rest energy.
+!  TT is temperature [keV] from mod_sig_ave.
+!=======================================================================
 real*8 function f_pl_ave(x)
 use mod_sig_ave
 implicit none
 real*8,intent(in)::x
-real*8::dplank_dT,plank_qft_norn  !==functions==!
-  !f_pl_ave=plank_qft_norn(x,TT) !dplank_dT(x*511.d3*1.602d-12,TT*1.d3*11600.d0)
+real*8::dplank_dT  !==function==!
+  !f_pl_ave=plank_qft_norn(x,TT)
   f_pl_ave=dplank_dT(x*511.d3*1.602d-12,TT*1.d3*11600.d0)
 return
 end function f_pl_ave
+!=======================================================================
 
 
 !================================================================================================================
-!Averaging for Rosseland case: sigma_average_ross
-! x - photon energy; TT (temperature), bb (field strength), l_pol (polarization state) are in the attached module
+!  Rosseland integrand for photons propagating along the magnetic field.
+!  x - photon energy in units of electron rest energy.
+!  TT, bb, l_pol and the cross-section tables are taken from mod_sig_ave.
 !================================================================================================================
 real*8 function f_sig_ave_ross(x)
 use mod_sig_ave
 implicit none
 real*8,intent(in)::x
-real*8::plank_qft_norn,sig_ang_ave_ross,dplank_dT  !==functions==!
-  !write(*,*)"ddd"
-  f_sig_ave_ross=3.d0*dplank_dT(x*511.d3*1.602d-12,TT*1.d3*11600.d0)/sig_ang_ave_ross(x,bb,sig1,sig2,10,l_pol)
-  !write(*,*)x,sig_ang_ave_ross(x,bb,sig1,sig2,10,l_pol); read(*,*)!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+real*8::sig_ang_ave_ross,dplank_dT  !==functions==!
+  f_sig_ave_ross=3.d0*dplank_dT(x*511.d3*1.602d-12,TT*1.d3*11600.d0)&
+                 /sig_ang_ave_ross(x,bb,sig1,sig2,10,l_pol)
+  !write(*,*)x,sig_ang_ave_ross(x,bb,sig1,sig2,10,l_pol); read(*,*)
   !f_sig_ave_ross=dplank_dT(x*511.d3*1.602d-12,TT*1.d3*11600.d0)/((x/bb)**2)
 return
 end function f_sig_ave_ross
+!================================================================================================================
+
 
 !====================================================================================
-!The function gives magnetic CS without resonanses (it is a kind of fake for the test)
-!l - polarisation
+!  Approximate magnetic cross-section without resonances.
+!  k      - photon energy in units of electron rest energy
+!  thetta_ - angle between photon momentum and magnetic field
+!  b      - magnetic field strength in units of critical field
+!  l      - polarization state
 !====================================================================================
 real*8 function int_magn_knt(k,thetta_,b,l)
 implicit none
 real*8,intent(in)::k,thetta_,b
 integer,intent(in)::l
-real*8:: diff_cs_knt
-real*8::thetta,fi,d_ang,pi,thetta_2
 real*8::k_res
+real*8::sin_t
 real*8::int_cs_knt_app   !==function==!
+  sin_t=sin(thetta_)
   if(thetta_.eq.0.d0)then
     k_res=b
   else
-    !k_res=b !(sqrt(1.d0+2.d0*b*(sin(thetta_)**2))-1.d0)/(sin(thetta_)**2)  !проверить эту аппроксимацию!!!
-    k_res=(sqrt(1.d0+2.d0*b*(sin(thetta_)**2))-1.d0)/(sin(thetta_)**2)  !проверить эту аппроксимацию!!!
+    !k_res=b !(sqrt(1.d0+2.d0*b*(sin_t**2))-1.d0)/(sin_t**2)  !==check this approximation==!
+    k_res=(sqrt(1.d0+2.d0*b*(sin_t**2))-1.d0)/(sin_t**2)  !==check this approximation==!
   end if
   if(l.eq.1)then
     int_magn_knt=min(int_cs_knt_app(k),(k/k_res)**2)
   else
-    int_magn_knt=min(int_cs_knt_app(k),(k/k_res)**2+(sin(thetta_))**2)
+    int_magn_knt=min(int_cs_knt_app(k),(k/k_res)**2+sin_t**2)
   end if
 return
 end function int_magn_knt
-
+!====================================================================================
 
 !==========================================================================================
 !==========================================================================================
