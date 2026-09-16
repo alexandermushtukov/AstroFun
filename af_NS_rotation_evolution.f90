@@ -20,8 +20,8 @@
 ! Linking must also include -fopenmp:
 !   gfortran -O3 -fopenmp -o main obj/ns_population_torque_models.o obj/c.o ...
 !
-! Run with, for example:
-!   OMP_NUM_THREADS=8 ./main
+! The number of OpenMP threads is set in the user configuration block via
+!   n_threads. It can therefore be changed directly near n_stars and seed.
 ! Memory:
 !   This version does not allocate orbit-by-orbit track arrays. It stores only
 !   initial/final values and summary diagnostics for each star.
@@ -30,6 +30,7 @@
 !   data stream for plotting scripts. Table data rows do not start with "#".
 !===============================================================================
 module ns_population_torque_models
+use omp_lib, only: omp_set_num_threads, omp_get_max_threads
 implicit none
 private
 public :: run_ns_population
@@ -130,7 +131,22 @@ integer, parameter :: OBL_SAME_AS_SPIN            = 3
      real(dp) :: typeII_boost = 30.0_dp
      real(dp) :: typeII_duration_orbits = 5.0_dp
 
-     ! Numerical substeps inside active/quiescent parts of each orbit.
+     !---------------------------------------------------------------------------
+     ! Adaptive time stepping
+     !---------------------------------------------------------------------------
+     ! A step is chosen so that, according to the instantaneous RHS, neither
+     ! the spin direction nor chi changes by more than max_angle_step_deg and
+     ! Omega changes by more than max_frac_omega_step in one step.  The result
+     ! is multiplied by timestep_safety and clipped to [dt_min_yr,dt_max_yr].
+     ! The step is always shortened at outburst/orbit boundaries and snapshots.
+     logical  :: use_adaptive_timestep = .true.
+     real(dp) :: max_angle_step_deg = 0.10_dp
+     real(dp) :: max_frac_omega_step = 1.0e-3_dp
+     real(dp) :: timestep_safety = 0.5_dp
+     real(dp) :: dt_min_yr = 1.0e-8_dp
+     real(dp) :: dt_max_yr = 1.0e3_dp
+
+     ! Used only if use_adaptive_timestep = .false.
      integer  :: active_substeps = 10
      integer  :: quiescent_substeps = 1
 
@@ -223,8 +239,14 @@ integer, parameter :: OBL_SAME_AS_SPIN            = 3
      real(dp), allocatable :: final_rm_over_rco(:), final_omega_s(:)
      real(dp), allocatable :: final_n_fastness(:), final_interaction_factor(:)
 
-     ! Full tracks are deliberately not allocated in this final-only version.
-     ! These components remain for compatibility with old output routines.
+     ! Population snapshots.  The first snapshot is t=0; the remaining
+     ! snapshot times are logarithmically spaced in time.
+     integer :: n_snapshots = 0
+     real(dp), allocatable :: snapshot_t_yr(:)
+     real(dp), allocatable :: alpha_snapshot_deg(:,:), chi_snapshot_deg(:,:)
+     real(dp), allocatable :: P_snapshot_s(:,:)
+
+     ! Legacy full-track components retained for compatibility with old routines.
      real(dp), allocatable :: t_yr(:)
      real(dp), allocatable :: P_track(:,:), alpha_track(:,:), chi_track(:,:)
      real(dp), allocatable :: rm_over_rco_track(:,:), omega_s_track(:,:)
@@ -241,22 +263,36 @@ contains
   type(PopulationResult) :: res
 
   integer :: n_stars
+  integer :: n_threads
   integer :: seed
+  integer :: n_snapshots
+  integer :: progress_every
+  integer :: nbins_alpha
+  integer :: nbins_chi
+  real(dp) :: snapshot_tmin_yr
   real(dp) :: Lx
   real(dp) :: t_end_yr
 
     !---------------------------------------------------------------------------
     ! User configuration block
     !---------------------------------------------------------------------------
-    n_stars = 200
+    n_stars = 2000
+    n_threads = 20     ! Number of OpenMP threads used for the population loop
     seed = 1
+
+    ! Population output/progress
+    n_snapshots = 20          ! Includes t=0 and t=t_end
+    snapshot_tmin_yr = 1.0_dp ! Earliest non-zero snapshot
+    progress_every = 10      ! Print progress after this many completed stars
+    nbins_alpha = 25         ! Number of bins for alpha histograms (0--180 deg)
+    nbins_chi   = 25          ! Number of bins for chi histograms   (0--90 deg)
 
     Lx = 1.0e35_dp
 
     p%P0 = 100.0_dp !1.0_dp
     p%B0 = 1.0e13_dp
     p%Mdot0 = mdot_from_lx(Lx, p%M0, p%R, 1.0_dp)
-    p%eta = 0.99_dp
+    p%eta = 0.8_dp !0.99_dp
 
     ! Be/XRB accretion history
     p%use_be_outbursts = .true.
@@ -281,6 +317,14 @@ contains
     p%typeII_boost = 30.0_dp
     p%typeII_duration_orbits = 5.0_dp
 
+    p%use_adaptive_timestep = .true.
+    p%max_angle_step_deg = 0.10_dp
+    p%max_frac_omega_step = 1.0e-3_dp
+    p%timestep_safety = 0.5_dp
+    p%dt_min_yr = 1.0e-8_dp
+    p%dt_max_yr = 1.0e3_dp
+
+    ! Used only if adaptive stepping is switched off.
     p%active_substeps = 10
     p%quiescent_substeps = 1
 
@@ -310,14 +354,20 @@ contains
     p%include_magnetic_burial = .false.
     p%include_parfrey_enhancement = .false.
 
-    t_end_yr = 4.0e5_dp
+    t_end_yr = 1.0e7_dp
 
-    call run_population(p, n_stars, t_end_yr, seed, res)
+    call omp_set_num_threads(max(1, n_threads))
 
-    call print_configuration(p, n_stars, t_end_yr, res%n_steps)
-    call print_population_table(res)
+    write(*,'(A,I0)') '# OpenMP threads requested = ' , max(1, n_threads)
+    write(*,'(A,I0)') '# OpenMP max threads       = ' , omp_get_max_threads()
+
+    call run_population(p, n_stars, t_end_yr, seed, res, n_snapshots, snapshot_tmin_yr, progress_every)
+
+    call print_configuration(p, n_stars, t_end_yr, res%n_snapshots)
+    !call print_population_table(res)
     call print_spin_statistics(res)
-    call print_histograms(res, 12, 9)
+    call print_snapshot_histograms(res, nbins_alpha, nbins_chi)
+    call print_snapshot_angle_statistics(res)
 
     ! Optional output for plotting later:
     ! call write_population_ascii("ns_be_population_summary.dat", res)
@@ -329,7 +379,7 @@ contains
 !===============================================================================
 ! Population driver
 !===============================================================================
-  subroutine run_population(p_in, n_stars, t_end_yr, seed, res)
+  subroutine run_population(p_in, n_stars, t_end_yr, seed, res, n_snapshots, snapshot_tmin_yr, progress_every)
     implicit none
 
     type(NSParams), intent(in) :: p_in
@@ -337,36 +387,30 @@ contains
     real(dp), intent(in) :: t_end_yr
     integer, intent(in) :: seed
     type(PopulationResult), intent(out) :: res
+    integer, intent(in), optional :: n_snapshots, progress_every
+    real(dp), intent(in), optional :: snapshot_tmin_yr
 
     type(NSParams) :: p
     type(AccretionHistory) :: hist
 
-    integer :: i, n_orbits
-    real(dp) :: alpha0, chi0
-    real(dp) :: qsum
+    integer :: i, nsnap, completed, progress_stride
+    real(dp) :: alpha0, chi0, qsum, tmin_snap
 
-    if (p_in%use_be_outbursts) then
-       n_orbits = ceiling_to_int(t_end_yr / p_in%Porb_yr)
-       if (n_orbits < 1) n_orbits = 1
-    else
-       n_orbits = ceiling_to_int(t_end_yr / max(p_in%Porb_yr, 1.0e-10_dp))
-       if (n_orbits < 1) n_orbits = 1
-    end if
+    nsnap = 8
+    if (present(n_snapshots)) nsnap = max(2, n_snapshots)
+    tmin_snap = 1.0_dp
+    if (present(snapshot_tmin_yr)) tmin_snap = max(snapshot_tmin_yr, 1.0e-12_dp)
+    progress_stride = max(1, n_stars/20)
+    if (present(progress_every)) progress_stride = max(1, progress_every)
 
-    ! Final-only storage. The number of orbit steps is not used for allocation.
     call allocate_population_result(res, n_stars, 0)
+    call setup_snapshot_times(res, nsnap, tmin_snap, t_end_yr)
 
-    !---------------------------------------------------------------------------
-    ! Parallel block:
-    ! Each star is independent. Its accretion history is generated, used, and
-    ! deallocated inside the same iteration. Therefore histories for all stars are
-    ! never stored simultaneously.
-    !
-    ! The standard Fortran random_number/random_seed generator is global. To avoid
-    ! OpenMP races, all random generation for a given star is done inside a
-    ! critical section. Integration itself is still parallel.
-    !---------------------------------------------------------------------------
+    completed = 0
+    write(*,'(A,I0,A,I0,A)') '# Progress: 0/', n_stars, ' stars (0%)'
 
+    ! Each star is independent. Random-history generation is kept inside a
+    ! critical region because the intrinsic Fortran RNG has global state.
     !$omp parallel do default(shared) private(i,p,hist,alpha0,chi0,qsum) schedule(dynamic)
     do i = 1, n_stars
 
@@ -374,9 +418,7 @@ contains
 
        !$omp critical(rng_history_generation)
        call init_random_seed(seed + 1000003*i)
-
        call generate_accretion_history(p, t_end_yr, hist)
-
        alpha0 = draw_alpha_isotropic_deg(0.0_dp, 180.0_dp)
        chi0   = draw_chi_isotropic_folded_deg(0.0_dp, 90.0_dp)
        !$omp end critical(rng_history_generation)
@@ -384,9 +426,16 @@ contains
        p%alpha0_deg = alpha0
        p%chi0_deg = chi0
 
-       call integrate_one_star(p, hist, i, res, qsum)
-
+       call integrate_one_star(p, hist, i, res, qsum, t_end_yr)
        call deallocate_history(hist)
+
+       !$omp critical(progress_output)
+       completed = completed + 1
+       if (mod(completed, progress_stride) == 0 .or. completed == n_stars) then
+          write(*,'(A,I0,A,I0,A,F6.1,A)') '# Progress: ', completed, '/', n_stars, &
+               ' stars (', 100.0_dp*real(completed,dp)/real(n_stars,dp), '%)'
+       end if
+       !$omp end critical(progress_output)
 
     end do
     !$omp end parallel do
@@ -402,6 +451,7 @@ contains
 
     res%n_stars = n_stars
     res%n_steps = 0
+    res%n_snapshots = 0
 
     allocate(res%alpha0_deg(n_stars), res%chi0_deg(n_stars), res%P0_s(n_stars))
     allocate(res%alpha_final_deg(n_stars), res%chi_final_deg(n_stars), res%P_final_s(n_stars))
@@ -427,6 +477,44 @@ contains
     res%final_interaction_factor = 0.0_dp
 
   end subroutine allocate_population_result
+
+
+  subroutine setup_snapshot_times(res, n_snapshots, tmin_yr, t_end_yr)
+    implicit none
+    type(PopulationResult), intent(inout) :: res
+    integer, intent(in) :: n_snapshots
+    real(dp), intent(in) :: tmin_yr, t_end_yr
+    integer :: k
+    real(dp) :: log_lo, log_hi, f
+
+    res%n_snapshots = max(2, n_snapshots)
+    allocate(res%snapshot_t_yr(res%n_snapshots))
+    allocate(res%alpha_snapshot_deg(res%n_snapshots,res%n_stars))
+    allocate(res%chi_snapshot_deg(res%n_snapshots,res%n_stars))
+    allocate(res%P_snapshot_s(res%n_snapshots,res%n_stars))
+
+    res%snapshot_t_yr = 0.0_dp
+    res%alpha_snapshot_deg = 0.0_dp
+    res%chi_snapshot_deg = 0.0_dp
+    res%P_snapshot_s = 0.0_dp
+
+    res%snapshot_t_yr(1) = 0.0_dp
+    if (t_end_yr <= 0.0_dp) return
+
+    if (res%n_snapshots == 2 .or. t_end_yr <= tmin_yr) then
+       do k = 2, res%n_snapshots
+          res%snapshot_t_yr(k) = t_end_yr * real(k-1,dp)/real(res%n_snapshots-1,dp)
+       end do
+    else
+       log_lo = log10(max(tmin_yr,1.0e-30_dp))
+       log_hi = log10(t_end_yr)
+       do k = 2, res%n_snapshots
+          f = real(k-2,dp)/real(res%n_snapshots-2,dp)
+          res%snapshot_t_yr(k) = 10.0_dp**(log_lo + f*(log_hi-log_lo))
+       end do
+       res%snapshot_t_yr(res%n_snapshots) = t_end_yr
+    end if
+  end subroutine setup_snapshot_times
 
 
 !===============================================================================
@@ -615,7 +703,7 @@ contains
 !===============================================================================
 ! One-star integration
 !===============================================================================
-  subroutine integrate_one_star(p, hist, star_id, res, qsum_out)
+  subroutine integrate_one_star(p, hist, star_id, res, qsum_out, t_end_yr)
     implicit none
 
     type(NSParams), intent(in) :: p
@@ -623,28 +711,23 @@ contains
     integer, intent(in) :: star_id
     type(PopulationResult), intent(inout) :: res
     real(dp), intent(out) :: qsum_out
+    real(dp), intent(in) :: t_end_yr
 
-    integer :: n
-    real(dp) :: y(6)
-    real(dp) :: t
-    real(dp) :: Omega, chi, Macc
-    real(dp) :: s(3)
-    real(dp) :: q_alpha
+    integer :: n, next_snap
+    real(dp) :: y(6), t, t_end, orbit_start, orbit_end, active_end
+    real(dp) :: Omega, chi, Macc, s(3), q_alpha
     type(TorqueTerms) :: tt
 
     call initial_state(p, hist, y)
-
     t = 0.0_dp
+    t_end = max(0.0_dp, t_end_yr)*yr
     qsum_out = 0.0_dp
 
-    ! Initial diagnostics.
-    Omega = y(1)
-    s = y(2:4)
-    chi = y(5)
-    Macc = y(6)
+    call store_snapshot_state(p, hist, t, y, star_id, 1, res)
+    next_snap = 2
 
+    Omega = y(1); s = y(2:4); chi = y(5); Macc = y(6)
     call compute_torque_terms(p, hist, t, Omega, s, chi, Macc, tt)
-
     q_alpha = sin(tt%alpha)**2 * cos(tt%alpha)
     qsum_out = qsum_out + q_alpha
 
@@ -652,38 +735,42 @@ contains
     res%chi0_deg(star_id)   = rad_to_deg(fold_chi_to_0_90(chi))
     res%P0_s(star_id)       = 2.0_dp*pi / Omega
 
-    ! Main evolution loop. Nothing is stored at intermediate orbits.
     do n = 1, hist%n_orbits
-       call integrate_one_orbit(p, hist, n, t, y)
+       if (t >= t_end - 1.0e-12_dp*max(t_end,1.0_dp)) exit
 
-       Omega = y(1)
-       s = y(2:4)
-       chi = y(5)
-       Macc = y(6)
+       orbit_start = real(n-1,dp)*p%Porb_yr*yr
+       orbit_end   = min(real(n,dp)*p%Porb_yr*yr, t_end)
+       active_end  = min(orbit_start + min(p%outburst_duration_yr,p%Porb_yr)*yr, orbit_end)
 
+       if (t < active_end) then
+          call integrate_segment(p, hist, t, y, active_end, next_snap, star_id, res)
+       end if
+       if (t < orbit_end) then
+          call integrate_segment(p, hist, t, y, orbit_end, next_snap, star_id, res)
+       end if
+
+       Omega = y(1); s = y(2:4); chi = y(5); Macc = y(6)
        call compute_torque_terms(p, hist, t, Omega, s, chi, Macc, tt)
-
        q_alpha = sin(tt%alpha)**2 * cos(tt%alpha)
        qsum_out = qsum_out + q_alpha
     end do
 
-    ! Final diagnostics.
-    Omega = y(1)
-    s = y(2:4)
-    chi = y(5)
-    Macc = y(6)
+    ! Fill any snapshot exactly at t_end that may remain because of roundoff.
+    do while (next_snap <= res%n_snapshots)
+       call store_snapshot_state(p, hist, t, y, star_id, next_snap, res)
+       next_snap = next_snap + 1
+    end do
 
+    Omega = y(1); s = y(2:4); chi = y(5); Macc = y(6)
     call compute_torque_terms(p, hist, t, Omega, s, chi, Macc, tt)
 
     res%alpha_final_deg(star_id) = rad_to_deg(tt%alpha)
     res%chi_final_deg(star_id)   = rad_to_deg(fold_chi_to_0_90(chi))
     res%P_final_s(star_id)       = 2.0_dp*pi / Omega
-
     res%delta_alpha_deg(star_id) = res%alpha_final_deg(star_id) - res%alpha0_deg(star_id)
     res%delta_chi_deg(star_id)   = res%chi_final_deg(star_id)   - res%chi0_deg(star_id)
     res%delta_P_s(star_id)       = res%P_final_s(star_id)       - res%P0_s(star_id)
-
-    res%mean_q_alpha(star_id) = qsum_out / real(hist%n_orbits + 1, dp)
+    res%mean_q_alpha(star_id) = qsum_out / real(max(1,min(hist%n_orbits,ceiling_to_int(t_end_yr/p%Porb_yr))) + 1, dp)
 
     if (hist%n_orbits > 0) then
        res%mean_mdot(star_id) = sum(hist%mdot) / real(hist%n_orbits, dp)
@@ -695,53 +782,121 @@ contains
     res%final_omega_s(star_id) = tt%omega_s
     res%final_n_fastness(star_id) = tt%n_fastness
     res%final_interaction_factor(star_id) = tt%interaction_factor
-
   end subroutine integrate_one_star
 
 
-  subroutine integrate_one_orbit(p, hist, n, t, y)
+  subroutine integrate_segment(p, hist, t, y, t_segment_end, next_snap, star_id, res)
     implicit none
-
     type(NSParams), intent(in) :: p
     type(AccretionHistory), intent(in) :: hist
-    integer, intent(in) :: n
-    real(dp), intent(inout) :: t
-    real(dp), intent(inout) :: y(6)
+    real(dp), intent(inout) :: t, y(6)
+    real(dp), intent(in) :: t_segment_end
+    integer, intent(inout) :: next_snap
+    integer, intent(in) :: star_id
+    type(PopulationResult), intent(inout) :: res
 
-    integer :: k, nact, nq
-    real(dp) :: dt_active, dt_quiet
-    real(dp) :: active_time, quiet_time
+    real(dp) :: dt, target, snap_t
+
+    do while (t < t_segment_end - 1.0e-12_dp*max(t_segment_end,1.0_dp))
+       target = t_segment_end
+       if (next_snap <= res%n_snapshots) then
+          snap_t = res%snapshot_t_yr(next_snap)*yr
+          if (snap_t > t .and. snap_t < target) target = snap_t
+       end if
+
+       if (p%use_adaptive_timestep) then
+          call choose_adaptive_timestep(p, hist, t, y, dt)
+       else
+          dt = fallback_fixed_timestep(p, hist, t)
+       end if
+       dt = min(dt, target - t)
+       if (dt <= 0.0_dp) exit
+
+       call rk4_step(p, hist, t, y, dt)
+       t = t + dt
+
+       if (next_snap <= res%n_snapshots) then
+          snap_t = res%snapshot_t_yr(next_snap)*yr
+          if (abs(t-snap_t) <= 1.0e-10_dp*max(snap_t,1.0_dp)) then
+             call store_snapshot_state(p, hist, t, y, star_id, next_snap, res)
+             next_snap = next_snap + 1
+          end if
+       end if
+    end do
+  end subroutine integrate_segment
+
+
+  subroutine choose_adaptive_timestep(p, hist, t, y, dt)
+    implicit none
+    type(NSParams), intent(in) :: p
+    type(AccretionHistory), intent(in) :: hist
+    real(dp), intent(in) :: t, y(6)
+    real(dp), intent(out) :: dt
+    real(dp) :: dydt(6), omega, ds_rate, dchi_rate
+    real(dp) :: tau_omega, tau_s, tau_chi, allowed_angle
+    type(TorqueTerms) :: tt
+
+    call rhs(p, hist, t, y, dydt, tt)
+    omega = max(abs(y(1)),1.0e-300_dp)
+    ds_rate = sqrt(sum(dydt(2:4)**2))
+    dchi_rate = abs(dydt(5))
+    allowed_angle = deg_to_rad(max(p%max_angle_step_deg,1.0e-12_dp))
+
+    tau_omega = huge(1.0_dp)
+    tau_s     = huge(1.0_dp)
+    tau_chi   = huge(1.0_dp)
+    if (abs(dydt(1)) > 0.0_dp) tau_omega = p%max_frac_omega_step*omega/abs(dydt(1))
+    if (ds_rate > 0.0_dp)      tau_s     = allowed_angle/ds_rate
+    if (dchi_rate > 0.0_dp)    tau_chi   = allowed_angle/dchi_rate
+
+    dt = p%timestep_safety * min(tau_omega, min(tau_s,tau_chi))
+    dt = min(dt, max(p%dt_max_yr, p%dt_min_yr)*yr)
+    dt = max(dt, max(p%dt_min_yr,0.0_dp)*yr)
+  end subroutine choose_adaptive_timestep
+
+
+  real(dp) function fallback_fixed_timestep(p, hist, t) result(dt)
+    implicit none
+    type(NSParams), intent(in) :: p
+    type(AccretionHistory), intent(in) :: hist
+    real(dp), intent(in) :: t
+    real(dp) :: phase_yr, active_time, quiet_time
+    integer :: n
 
     if (.not. p%use_be_outbursts) then
-       nact = max(1, p%active_substeps)
-       dt_active = p%Porb_yr * yr / real(nact, dp)
-       do k = 1, nact
-          call rk4_step(p, hist, t, y, dt_active)
-          t = t + dt_active
-       end do
+       dt = p%Porb_yr*yr/real(max(1,p%active_substeps),dp)
        return
     end if
-
-    active_time = min(p%outburst_duration_yr, p%Porb_yr) * yr
-    quiet_time  = max(0.0_dp, p%Porb_yr - p%outburst_duration_yr) * yr
-
-    nact = max(1, p%active_substeps)
-    dt_active = active_time / real(nact, dp)
-
-    do k = 1, nact
-       call rk4_step(p, hist, t, y, dt_active)
-       t = t + dt_active
-    end do
-
-    if (quiet_time > 0.0_dp) then
-       nq = max(1, p%quiescent_substeps)
-       dt_quiet = quiet_time / real(nq, dp)
-       do k = 1, nq
-          call rk4_step(p, hist, t, y, dt_quiet)
-          t = t + dt_quiet
-       end do
+    n = int((t/yr)/p%Porb_yr) + 1
+    phase_yr = t/yr - real(n-1,dp)*p%Porb_yr
+    active_time = min(p%outburst_duration_yr,p%Porb_yr)*yr
+    quiet_time = max(0.0_dp,p%Porb_yr-p%outburst_duration_yr)*yr
+    if (phase_yr < p%outburst_duration_yr) then
+       dt = active_time/real(max(1,p%active_substeps),dp)
+    else
+       dt = quiet_time/real(max(1,p%quiescent_substeps),dp)
     end if
-  end subroutine integrate_one_orbit
+  end function fallback_fixed_timestep
+
+
+  subroutine store_snapshot_state(p, hist, t, y, star_id, k, res)
+    implicit none
+    type(NSParams), intent(in) :: p
+    type(AccretionHistory), intent(in) :: hist
+    real(dp), intent(in) :: t, y(6)
+    integer, intent(in) :: star_id, k
+    type(PopulationResult), intent(inout) :: res
+    real(dp) :: yy(6), s(3), omega, chi, macc
+    type(TorqueTerms) :: tt
+
+    yy = y
+    call physicalize_state(p, yy)
+    omega = yy(1); s=yy(2:4); chi=yy(5); macc=yy(6)
+    call compute_torque_terms(p, hist, t, omega, s, chi, macc, tt)
+    res%alpha_snapshot_deg(k,star_id) = rad_to_deg(tt%alpha)
+    res%chi_snapshot_deg(k,star_id) = rad_to_deg(fold_chi_to_0_90(chi))
+    res%P_snapshot_s(k,star_id) = 2.0_dp*pi/omega
+  end subroutine store_snapshot_state
 
 
   subroutine initial_state(p, hist, y)
@@ -797,7 +952,10 @@ contains
 
     yt = y + dt*k3
     call physicalize_state(p, yt)
-    call rhs(p, hist, t + dt, yt, k4, tt)
+    ! Evaluate the RK4 endpoint infinitesimally from the left.  This prevents
+    ! the k4 stage from sampling the next accretion regime when a step ends
+    ! exactly at an outburst or orbit boundary.
+    call rhs(p, hist, nearest(t + dt, -1.0_dp), yt, k4, tt)
 
     y = y + dt*(k1 + 2.0_dp*k2 + 2.0_dp*k3 + k4)/6.0_dp
     call physicalize_state(p, y)
@@ -1320,20 +1478,20 @@ contains
 ! Printing/output
 !===============================================================================
 
-  subroutine print_configuration(p, n_stars, t_end_yr, n_steps)
+  subroutine print_configuration(p, n_stars, t_end_yr, n_snapshots)
     implicit none
 
     type(NSParams), intent(in) :: p
-    integer, intent(in) :: n_stars, n_steps
+    integer, intent(in) :: n_stars, n_snapshots
     real(dp), intent(in) :: t_end_yr
 
     write(*,*)
     write(*,*) '#=============================================================='
     write(*,*) '# Be/XRB NS population run configuration'
-    write(*,*) '# Final-only mode: full tracks are not stored'
+    write(*,*) '# Snapshot mode: full tracks are not stored'
     write(*,*) '#=============================================================='
     write(*,'(A,I8)')      '# N stars                   = ', n_stars
-    write(*,'(A,I8)')      '# N stored orbit steps       = ', n_steps
+    write(*,'(A,I8)')      '# N population snapshots    = ', n_snapshots
     write(*,'(A,ES12.4)')  '# t_end [yr]                = ', t_end_yr
     write(*,'(A,ES12.4)')  '# P0 [s]                    = ', p%P0
     write(*,'(A,ES12.4)')  '# B0 [G]                    = ', p%B0
@@ -1437,47 +1595,116 @@ contains
 end subroutine print_spin_statistics
 
 
-  subroutine print_histograms(res, nbins_alpha, nbins_chi)
+  subroutine print_snapshot_histograms(res, nbins_alpha, nbins_chi)
     implicit none
-
     type(PopulationResult), intent(in) :: res
     integer, intent(in) :: nbins_alpha, nbins_chi
-
-    integer, allocatable :: h_alpha0(:), h_alphaf(:), h_chi0(:), h_chif(:)
-    integer :: i
+    integer, allocatable :: h(:,:)
+    integer :: i, k
     real(dp) :: lo, hi
 
-    allocate(h_alpha0(nbins_alpha), h_alphaf(nbins_alpha))
-    allocate(h_chi0(nbins_chi), h_chif(nbins_chi))
+    write(*,*)
+    write(*,*) '# Population snapshots (log-spaced in time after t=0)'
+    write(*,*) '# Snapshot times [yr]:'
+    do k = 1, res%n_snapshots
+       write(*,'(A,I3,A,ES14.6)') '#   snapshot ', k, ': ', res%snapshot_t_yr(k)
+    end do
 
-    call make_histogram(res%alpha0_deg, res%n_stars, 0.0_dp, 180.0_dp, nbins_alpha, h_alpha0)
-    call make_histogram(res%alpha_final_deg, res%n_stars, 0.0_dp, 180.0_dp, nbins_alpha, h_alphaf)
-    call make_histogram(res%chi0_deg, res%n_stars, 0.0_dp, 90.0_dp, nbins_chi, h_chi0)
-    call make_histogram(res%chi_final_deg, res%n_stars, 0.0_dp, 90.0_dp, nbins_chi, h_chif)
+    !---------------------------------------------------------------------------
+    ! Alpha histogram table.  The first two columns define the common bins.
+    ! Columns N1...Nn contain the number of stars in the same bin at each
+    ! snapshot time listed above.
+    !---------------------------------------------------------------------------
+    allocate(h(nbins_alpha,res%n_snapshots))
+    do k = 1, res%n_snapshots
+       call make_histogram(res%alpha_snapshot_deg(k,:), res%n_stars, &
+            0.0_dp, 180.0_dp, nbins_alpha, h(:,k))
+    end do
 
     write(*,*)
-    write(*,*) '# Histogram: alpha initial/final'
-    write(*,*) '#---------------------------------------------'
-    write(*,'(A)') '# bin_low  bin_high   N_initial   N_final'
+    write(*,*) '# Alpha histogram table'
+    write(*,'(A)',advance='no') '# bin_low  bin_high'
+    do k = 1, res%n_snapshots
+       write(*,'(A,I0)',advance='no') '        N', k
+    end do
+    write(*,*)
     do i = 1, nbins_alpha
-       lo = 180.0_dp * real(i-1, dp) / real(nbins_alpha, dp)
-       hi = 180.0_dp * real(i, dp) / real(nbins_alpha, dp)
-       write(*,'(F8.2,2X,F8.2,2X,I8,2X,I8)') lo, hi, h_alpha0(i), h_alphaf(i)
+       lo = 180.0_dp*real(i-1,dp)/real(nbins_alpha,dp)
+       hi = 180.0_dp*real(i,dp)/real(nbins_alpha,dp)
+       write(*,'(F8.2,2X,F8.2)',advance='no') lo, hi
+       do k = 1, res%n_snapshots
+          write(*,'(2X,I9)',advance='no') h(i,k)
+       end do
+       write(*,*)
+    end do
+    deallocate(h)
+
+    !---------------------------------------------------------------------------
+    ! Chi histogram table in the same format.
+    !---------------------------------------------------------------------------
+    allocate(h(nbins_chi,res%n_snapshots))
+    do k = 1, res%n_snapshots
+       call make_histogram(res%chi_snapshot_deg(k,:), res%n_stars, &
+            0.0_dp, 90.0_dp, nbins_chi, h(:,k))
     end do
 
     write(*,*)
-    write(*,*) '# Histogram: chi initial/final'
-    write(*,*) '#---------------------------------------------'
-    write(*,'(A)') '# bin_low  bin_high   N_initial   N_final'
+    write(*,*) '# Chi histogram table'
+    write(*,'(A)',advance='no') '# bin_low  bin_high'
+    do k = 1, res%n_snapshots
+       write(*,'(A,I0)',advance='no') '        N', k
+    end do
+    write(*,*)
     do i = 1, nbins_chi
-       lo = 90.0_dp * real(i-1, dp) / real(nbins_chi, dp)
-       hi = 90.0_dp * real(i, dp) / real(nbins_chi, dp)
-       write(*,'(F8.2,2X,F8.2,2X,I8,2X,I8)') lo, hi, h_chi0(i), h_chif(i)
+       lo = 90.0_dp*real(i-1,dp)/real(nbins_chi,dp)
+       hi = 90.0_dp*real(i,dp)/real(nbins_chi,dp)
+       write(*,'(F8.2,2X,F8.2)',advance='no') lo, hi
+       do k = 1, res%n_snapshots
+          write(*,'(2X,I9)',advance='no') h(i,k)
+       end do
+       write(*,*)
     end do
-    write(*,*)
+    deallocate(h)
 
-    deallocate(h_alpha0, h_alphaf, h_chi0, h_chif)
-  end subroutine print_histograms
+  end subroutine print_snapshot_histograms
+
+
+  subroutine print_snapshot_angle_statistics(res)
+    implicit none
+    type(PopulationResult), intent(in) :: res
+    integer :: i, k, n
+    real(dp) :: mean_alpha, sigma_alpha, mean_chi, sigma_chi
+    real(dp) :: da, dc
+
+    n = res%n_stars
+    if (n <= 0) return
+
+    write(*,*)
+    write(*,*) '# Snapshot angle statistics'
+    write(*,'(A)') '# time_yr        mean_alpha_deg  sigma_alpha_deg   mean_chi_deg   sigma_chi_deg'
+
+    do k = 1, res%n_snapshots
+       mean_alpha = sum(res%alpha_snapshot_deg(k,:)) / real(n,dp)
+       mean_chi   = sum(res%chi_snapshot_deg(k,:))   / real(n,dp)
+
+       sigma_alpha = 0.0_dp
+       sigma_chi = 0.0_dp
+       if (n > 1) then
+          do i = 1, n
+             da = res%alpha_snapshot_deg(k,i) - mean_alpha
+             dc = res%chi_snapshot_deg(k,i) - mean_chi
+             sigma_alpha = sigma_alpha + da*da
+             sigma_chi = sigma_chi + dc*dc
+          end do
+          sigma_alpha = sqrt(sigma_alpha / real(n-1,dp))
+          sigma_chi   = sqrt(sigma_chi   / real(n-1,dp))
+       end if
+
+       write(*,'(ES14.6,2X,F14.6,2X,F15.6,2X,F13.6,2X,F14.6)') &
+            res%snapshot_t_yr(k), mean_alpha, sigma_alpha, mean_chi, sigma_chi
+    end do
+
+  end subroutine print_snapshot_angle_statistics
 
 
   subroutine make_histogram(x, n, xmin, xmax, nbins, h)
@@ -1590,4 +1817,3 @@ end subroutine print_spin_statistics
   end function fold_chi_to_0_90
 
 end module ns_population_torque_models
-
