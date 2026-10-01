@@ -73,6 +73,18 @@ integer, parameter :: OBL_SAME_AS_SPIN            = 3
 
      ! Initial NS parameters
      real(dp) :: P0 = 100.0_dp
+
+     ! Initial spin-period distribution.
+     ! If use_P0_lognormal = .false., every star starts with P0.
+     ! If use_P0_lognormal = .true., log10(P0/s) is drawn from a normal
+     ! distribution centred on log10(P0) with standard deviation
+     ! P0_sigma_log10. The draw is truncated to [P0_min, P0_max].
+     ! Setting P0_sigma_log10 = 0 also gives the fixed period P0.
+     logical  :: use_P0_lognormal = .true.
+     real(dp) :: P0_sigma_log10 = 0.5_dp
+     real(dp) :: P0_min = 1.0_dp
+     real(dp) :: P0_max = 1000.0_dp
+
      real(dp) :: B0 = 1.0e13_dp
      integer  :: B_convention = 2
      ! B_convention = 1: equatorial field, mu = B R^3
@@ -289,10 +301,21 @@ contains
 
     Lx = 1.0e35_dp
 
-    p%P0 = 100.0_dp !1.0_dp
-    p%B0 = 1.0e13_dp
+    ! Initial spin periods.
+    ! Fiducial choice: truncated log-normal distribution with median 100 s
+    ! and sigma = 0.5 dex, restricted to 1--1000 s.
+    ! For a single fixed initial period, either set
+    !   p%use_P0_lognormal = .false.
+    ! and choose p%P0, or equivalently set p%P0_sigma_log10 = 0.
+    p%P0 = 100.0_dp
+    p%use_P0_lognormal = .true.
+    p%P0_sigma_log10 = 0.5_dp
+    p%P0_min = 1.0_dp
+    p%P0_max = 1000.0_dp
+
+    p%B0 = 1.0e12_dp
     p%Mdot0 = mdot_from_lx(Lx, p%M0, p%R, 1.0_dp)
-    p%eta = 0.8_dp !0.99_dp
+    p%eta = 0.99_dp
 
     ! Be/XRB accretion history
     p%use_be_outbursts = .true.
@@ -303,8 +326,8 @@ contains
     p%typeI_probability_per_orbit = 0.3_dp
 
     p%beta_mean_deg = 15.0_dp
-    p%beta_rms_deg  = 10.0_dp
-    p%corr_time_orbits = 20.0_dp
+    p%beta_rms_deg  = 10.0_dp !10.0_dp
+    p%corr_time_orbits = 20.0_dp !20.0_dp
     p%random_mean_tilt_azimuth = .true.
 
     ! If negative, the code uses p%Mdot0.
@@ -394,7 +417,7 @@ contains
     type(AccretionHistory) :: hist
 
     integer :: i, nsnap, completed, progress_stride
-    real(dp) :: alpha0, chi0, qsum, tmin_snap
+    real(dp) :: alpha0, chi0, P0_draw, qsum, tmin_snap
 
     nsnap = 8
     if (present(n_snapshots)) nsnap = max(2, n_snapshots)
@@ -411,7 +434,7 @@ contains
 
     ! Each star is independent. Random-history generation is kept inside a
     ! critical region because the intrinsic Fortran RNG has global state.
-    !$omp parallel do default(shared) private(i,p,hist,alpha0,chi0,qsum) schedule(dynamic)
+    !$omp parallel do default(shared) private(i,p,hist,alpha0,chi0,P0_draw,qsum) schedule(dynamic)
     do i = 1, n_stars
 
        p = p_in
@@ -421,10 +444,12 @@ contains
        call generate_accretion_history(p, t_end_yr, hist)
        alpha0 = draw_alpha_isotropic_deg(0.0_dp, 180.0_dp)
        chi0   = draw_chi_isotropic_folded_deg(0.0_dp, 90.0_dp)
+       P0_draw = draw_initial_period_s(p)
        !$omp end critical(rng_history_generation)
 
        p%alpha0_deg = alpha0
        p%chi0_deg = chi0
+       p%P0 = P0_draw
 
        call integrate_one_star(p, hist, i, res, qsum, t_end_yr)
        call deallocate_history(hist)
@@ -1439,6 +1464,30 @@ contains
   end subroutine random_normal_pair
 
 
+  real(dp) function draw_initial_period_s(p) result(P0_s)
+    implicit none
+    type(NSParams), intent(in) :: p
+    real(dp) :: z1, z2, logP, Plo, Phi
+
+    if (.not. p%use_P0_lognormal .or. p%P0_sigma_log10 <= 0.0_dp) then
+       P0_s = p%P0
+       return
+    end if
+
+    Plo = max(p%P0_min, 1.0e-12_dp)
+    Phi = max(p%P0_max, Plo)
+
+    ! Rejection sampling from a truncated log-normal distribution.
+    ! For the fiducial parameters the rejection fraction is very small.
+    do
+       call random_normal_pair(z1, z2)
+       logP = log10(max(p%P0, 1.0e-12_dp)) + p%P0_sigma_log10*z1
+       P0_s = 10.0_dp**logP
+       if (P0_s >= Plo .and. P0_s <= Phi) exit
+    end do
+  end function draw_initial_period_s
+
+
   real(dp) function draw_alpha_isotropic_deg(alpha_min_deg, alpha_max_deg) result(alpha_deg)
     implicit none
     real(dp), intent(in) :: alpha_min_deg, alpha_max_deg
@@ -1493,7 +1542,11 @@ contains
     write(*,'(A,I8)')      '# N stars                   = ', n_stars
     write(*,'(A,I8)')      '# N population snapshots    = ', n_snapshots
     write(*,'(A,ES12.4)')  '# t_end [yr]                = ', t_end_yr
-    write(*,'(A,ES12.4)')  '# P0 [s]                    = ', p%P0
+    write(*,'(A,ES12.4)')  '# P0 median/fixed [s]       = ', p%P0
+    write(*,'(A,L8)')      '# use P0 log-normal         = ', p%use_P0_lognormal
+    write(*,'(A,ES12.4)')  '# P0 sigma log10 [dex]      = ', p%P0_sigma_log10
+    write(*,'(A,ES12.4)')  '# P0 minimum [s]            = ', p%P0_min
+    write(*,'(A,ES12.4)')  '# P0 maximum [s]            = ', p%P0_max
     write(*,'(A,ES12.4)')  '# B0 [G]                    = ', p%B0
     write(*,'(A,ES12.4)')  '# Mdot0/Type-I mean [g/s]   = ', p%Mdot0
     write(*,'(A,ES12.4)')  '# eta                       = ', p%eta
@@ -1674,34 +1727,40 @@ end subroutine print_spin_statistics
     type(PopulationResult), intent(in) :: res
     integer :: i, k, n
     real(dp) :: mean_alpha, sigma_alpha, mean_chi, sigma_chi
-    real(dp) :: da, dc
+    real(dp) :: mean_P, sigma_P
+    real(dp) :: da, dc, dper
 
     n = res%n_stars
     if (n <= 0) return
 
     write(*,*)
     write(*,*) '# Snapshot angle statistics'
-    write(*,'(A)') '# time_yr        mean_alpha_deg  sigma_alpha_deg   mean_chi_deg   sigma_chi_deg'
+    write(*,'(A)') '# time_yr        mean_alpha_deg  sigma_alpha_deg   mean_chi_deg   sigma_chi_deg      mean_P_s       sigma_P_s'
 
     do k = 1, res%n_snapshots
        mean_alpha = sum(res%alpha_snapshot_deg(k,:)) / real(n,dp)
        mean_chi   = sum(res%chi_snapshot_deg(k,:))   / real(n,dp)
+       mean_P     = sum(res%P_snapshot_s(k,:))       / real(n,dp)
 
        sigma_alpha = 0.0_dp
        sigma_chi = 0.0_dp
+       sigma_P = 0.0_dp
        if (n > 1) then
           do i = 1, n
              da = res%alpha_snapshot_deg(k,i) - mean_alpha
              dc = res%chi_snapshot_deg(k,i) - mean_chi
+             dper = res%P_snapshot_s(k,i) - mean_P
              sigma_alpha = sigma_alpha + da*da
              sigma_chi = sigma_chi + dc*dc
+             sigma_P = sigma_P + dper*dper
           end do
           sigma_alpha = sqrt(sigma_alpha / real(n-1,dp))
           sigma_chi   = sqrt(sigma_chi   / real(n-1,dp))
+          sigma_P     = sqrt(sigma_P     / real(n-1,dp))
        end if
 
-       write(*,'(ES14.6,2X,F14.6,2X,F15.6,2X,F13.6,2X,F14.6)') &
-            res%snapshot_t_yr(k), mean_alpha, sigma_alpha, mean_chi, sigma_chi
+       write(*,'(ES14.6,2X,F14.6,2X,F15.6,2X,F13.6,2X,F14.6,2X,ES14.6,2X,ES14.6)') &
+            res%snapshot_t_yr(k), mean_alpha, sigma_alpha, mean_chi, sigma_chi, mean_P, sigma_P
     end do
 
   end subroutine print_snapshot_angle_statistics
