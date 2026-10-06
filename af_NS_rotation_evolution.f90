@@ -293,7 +293,7 @@ contains
     seed = 1
 
     ! Population output/progress
-    n_snapshots = 20          ! Includes t=0 and t=t_end
+    n_snapshots = 200          ! Includes t=0 and t=t_end
     snapshot_tmin_yr = 1.0_dp ! Earliest non-zero snapshot
     progress_every = 10      ! Print progress after this many completed stars
     nbins_alpha = 25         ! Number of bins for alpha histograms (0--180 deg)
@@ -313,7 +313,7 @@ contains
     p%P0_min = 1.0_dp
     p%P0_max = 1000.0_dp
 
-    p%B0 = 1.0e12_dp
+    p%B0 = 1.0e13_dp
     p%Mdot0 = mdot_from_lx(Lx, p%M0, p%R, 1.0_dp)
     p%eta = 0.99_dp
 
@@ -322,8 +322,8 @@ contains
 
     p%Porb_yr = 0.27_dp
     p%outburst_duration_yr = 0.03_dp
-    p%Mdot_quiescent = 0.0_dp
-    p%typeI_probability_per_orbit = 0.3_dp
+    p%Mdot_quiescent = 0.0_dp !1.0e14_dp  !0.0_dp
+    p%typeI_probability_per_orbit = 0.3_dp !0.3_dp
 
     p%beta_mean_deg = 15.0_dp
     p%beta_rms_deg  = 10.0_dp !10.0_dp
@@ -335,7 +335,7 @@ contains
     p%Mdot_typeI_sigma_log = 0.5_dp
     p%Mdot_corr_time_orbits = 5.0_dp
 
-    p%include_typeII = .false.
+    p%include_typeII = .false. !.false.
     p%typeII_probability_per_orbit = 1.0e-3_dp
     p%typeII_boost = 30.0_dp
     p%typeII_duration_orbits = 5.0_dp
@@ -369,7 +369,7 @@ contains
     p%tanh_width = 0.25_dp
     p%include_BA_magnetospheric_braking = .true.
 
-    p%include_pulsar_torque = .true.
+    p%include_pulsar_torque = .false. !.true.
     p%include_accretion_obliquity = .true.
     p%include_alpha_alignment = .true.
 
